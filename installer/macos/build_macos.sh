@@ -103,14 +103,24 @@ echo "[5/6] 파일 복사..."
 cp -R "$PYTHON_ROOT" "$APP_BUNDLE/Contents/Resources/python"
 
 # 앱 소스 코드 복사
-cp -R "$PROJECT_ROOT/report_app" "$APP_BUNDLE/Contents/Resources/app/report_app"
+cp -R "$PROJECT_ROOT/core" "$APP_BUNDLE/Contents/Resources/app/core"
+cp -R "$PROJECT_ROOT/api" "$APP_BUNDLE/Contents/Resources/app/api"
+
+# React 빌드 산출물. Node 런타임은 번들에 넣지 않는다 —
+# npm run build 는 개발 머신에서 돌고 결과만 들어간다.
+if [ ! -d "$PROJECT_ROOT/web/dist" ]; then
+    echo "오류: web/dist 가 없다. 'cd web && npm run build' 를 먼저 실행할 것." >&2
+    echo "      건너뛰면 서버는 뜨지만 화면이 빈 설치본이 나간다." >&2
+    exit 1
+fi
+mkdir -p "$APP_BUNDLE/Contents/Resources/app/web"
+cp -R "$PROJECT_ROOT/web/dist" "$APP_BUNDLE/Contents/Resources/app/web/dist"
 cp -R "$PROJECT_ROOT/config" "$APP_BUNDLE/Contents/Resources/app/config"
 # secrets.toml 은 절대 번들에 넣지 않는다. 유지보수자가 로컬 테스트용으로
 # .streamlit/secrets.toml 을 만들어 둔 상태에서 빌드하면 실제 API Key 가
 # 배포 .dmg 안으로 들어간다(.gitignore 는 git 만 막고 빌드는 못 막는다).
-cp -R "$PROJECT_ROOT/.streamlit" "$APP_BUNDLE/Contents/Resources/app/.streamlit"
 rm -f "$APP_BUNDLE/Contents/Resources/app/.streamlit/secrets.toml"
-cp "$PROJECT_ROOT/전임교원_연구실적_전처리.py" "$APP_BUNDLE/Contents/Resources/app/"
+# 전처리는 core/preprocess.py 로 옮겨져 core/ 복사에 포함된다.
 cp "$PROJECT_ROOT/requirements.txt" "$APP_BUNDLE/Contents/Resources/app/"
 
 # __pycache__ 삭제

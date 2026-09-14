@@ -211,21 +211,28 @@ def copy_app_files():
         APP_DIR / "config",
     )
 
-    # .streamlit/ 설정
-    # secrets.toml 은 절대 번들에 넣지 않는다. 유지보수자가 로컬 테스트용으로
-    # .streamlit/secrets.toml 을 만들어 둔 상태에서 빌드하면 실제 API Key 가
-    # 배포 .exe 안으로 들어가기 때문이다(.gitignore 는 git 만 막고 빌드는 못 막는다).
+    # api/ 패키지 (FastAPI 서버)
     shutil.copytree(
-        PROJECT_ROOT / ".streamlit",
-        APP_DIR / ".streamlit",
-        ignore=shutil.ignore_patterns("secrets.toml", "*.secrets.toml", "__pycache__"),
+        PROJECT_ROOT / "api",
+        APP_DIR / "api",
+        ignore=shutil.ignore_patterns("__pycache__"),
     )
 
-    # 전처리 스크립트
-    shutil.copy2(
-        PROJECT_ROOT / "전임교원_연구실적_전처리.py",
-        APP_DIR / "전임교원_연구실적_전처리.py",
-    )
+    # web/dist — React 빌드 산출물.
+    #
+    # **Node 런타임은 번들에 넣지 않는다.** `npm run build` 는 개발 PC 에서
+    # 돌고, 설치본에는 그 결과인 정적 파일만 들어간다. FastAPI 가
+    # StaticFiles 로 서빙한다(api/main.py:mount_web).
+    web_dist = PROJECT_ROOT / "web" / "dist"
+    if not web_dist.is_dir():
+        raise SystemExit(
+            "web/dist 가 없다. 빌드 전에 `cd web && npm run build` 를 먼저 실행해야 한다.\n"
+            "이걸 건너뛰면 서버는 뜨지만 화면이 빈 상태로 배포된다."
+        )
+    shutil.copytree(web_dist, APP_DIR / "web" / "dist")
+    print(f"  화면 포함: web/dist ({sum(1 for _ in web_dist.rglob('*') if _.is_file())}개 파일)")
+
+    # 전처리 스크립트는 core/preprocess.py 로 옮겨져 core/ 복사에 이미 포함된다.
 
     # requirements.txt
     shutil.copy2(

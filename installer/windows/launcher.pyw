@@ -30,15 +30,31 @@ def find_free_port(start=8501, end=8510):
     return start
 
 
-def wait_for_server(port, timeout=60):
-    """Streamlit 서버가 응답할 때까지 대기한다."""
+def wait_for_server(port, proc=None, timeout=60):
+    """API 가 실제로 응답할 때까지 기다린다.
+
+    소켓이 열린 것과 앱이 준비된 것은 다르다. uvicorn 은 포트를 먼저 잡고
+    import 를 마저 하는데, 그 사이에 브라우저를 열면 빈 화면을 본다.
+    `/api/health` 가 200 을 줄 때까지 기다린다.
+
+    `proc` 을 주면 서버가 **죽었을 때 즉시 포기한다** — 안 그러면 이미 끝난
+    프로세스를 60초 동안 기다리게 된다.
+    """
+    import urllib.error
+    import urllib.request
+
+    url = f"http://127.0.0.1:{port}/api/health"
     start_time = time.time()
     while time.time() - start_time < timeout:
+        if proc is not None and proc.poll() is not None:
+            return False  # 서버가 이미 종료됐다
         try:
-            with socket.create_connection(("127.0.0.1", port), timeout=1):
-                return True
-        except (ConnectionRefusedError, OSError):
-            time.sleep(0.5)
+            with urllib.request.urlopen(url, timeout=2) as resp:
+                if resp.status == 200:
+                    return True
+        except (urllib.error.URLError, OSError):
+            pass
+        time.sleep(0.5)
     return False
 
 
@@ -56,7 +72,6 @@ def show_error(message):
 def main():
     app_dir = Path(__file__).resolve().parent
     python_exe = app_dir / "python-embed" / "python.exe"
-    app_py = app_dir / "report_app" / "app.py"
     log_path = app_dir / "app_error.log"
 
     # 로그 파일 준비
@@ -80,24 +95,28 @@ def main():
     # 환경 변수
     env = os.environ.copy()
     env["PYTHONUTF8"] = "1"
-    env["STREAMLIT_SERVER_HEADLESS"] = "true"
-    env["STREAMLIT_SERVER_PORT"] = str(port)
-    env["STREAMLIT_BROWSER_GATHER_USAGE_STATS"] = "false"
+    # 한글 파일명·로그가 cp949 로 깨지지 않게 한다
+    env["PYTHONIOENCODING"] = "utf-8"
+    # 차트는 창을 띄우지 않는다. 백엔드는 core/chart_generator 가 직접
+    # 못박지만, 혹시 다른 경로로 import 되더라도 안전하도록 한 번 더 건다.
+    env["MPLBACKEND"] = "Agg"
 
     # Streamlit 서버 시작 — stderr를 로그 파일로 리디렉션
     CREATE_NO_WINDOW = 0x08000000
-    stderr_path = app_dir / "streamlit_error.log"
+    stderr_path = app_dir / "server_error.log"
     stderr_file = open(stderr_path, "w", encoding="utf-8")
 
-    log.write("Streamlit 시작 중...\n")
+    log.write("API 서버 시작 중...\n")
     log.flush()
 
     proc = subprocess.Popen(
         [
-            str(python_exe), "-m", "streamlit", "run",
-            str(app_py),
-            "--server.headless", "true",
-            "--server.port", str(port),
+            str(python_exe), "-m", "uvicorn", "api.main:app",
+            "--host", "127.0.0.1",
+            "--port", str(port),
+            # 설치본은 단일 사용자다. 워커를 늘리면 메모리만 더 쓴다.
+            "--workers", "1",
+            "--log-level", "warning",
         ],
         cwd=str(app_dir),
         env=env,
@@ -106,8 +125,8 @@ def main():
         stderr=stderr_file,
     )
 
-    # 서버 대기
-    if wait_for_server(port):
+    # 서버 대기 — 죽으면 즉시 포기한다
+    if wait_for_server(port, proc=proc):
         log.write(f"서버 시작 성공: http://localhost:{port}\n")
         log.close()
         webbrowser.open(f"http://localhost:{port}")

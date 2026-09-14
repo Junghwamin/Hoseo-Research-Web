@@ -27,20 +27,17 @@ DATA_DIR="$HOME/Library/Application Support/HoseoIRPortal"
 mkdir -p "$DATA_DIR/output/reports"
 mkdir -p "$DATA_DIR/Raw data"
 
-# .streamlit 설정 복사 (최초 실행 시)
-if [ ! -d "$DATA_DIR/.streamlit" ]; then
-    cp -R "$APP_DIR/.streamlit" "$DATA_DIR/.streamlit"
-    rm -f "$DATA_DIR/.streamlit/secrets.toml"  # 사용자 데이터 영역에도 시크릿을 두지 않는다
-fi
-
 # config 복사 (최초 실행 시)
 if [ ! -d "$DATA_DIR/config" ]; then
     cp -R "$APP_DIR/config" "$DATA_DIR/config"
 fi
 
 export PYTHONPATH="$APP_DIR"
-export STREAMLIT_SERVER_HEADLESS=true
-export STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8
+# 차트는 창을 띄우지 않는다. core/chart_generator 가 직접 못박지만
+# 한 번 더 건다 — GUI 백엔드로 돌면 요청 스레드에서 죽는다.
+export MPLBACKEND=Agg
 export PATH="$PYTHON_DIR/bin:$PATH"
 
 # 사용 가능한 포트 찾기
@@ -62,10 +59,12 @@ PORT=$(find_free_port)
 # (앱 코드의 상대경로 output/, Raw data/, .env 등이 여기에 생성됨)
 cd "$DATA_DIR"
 
-# Streamlit 서버 시작 (백그라운드)
-"$PYTHON" -m streamlit run "$APP_DIR/report_app/app.py" \
-    --server.headless true \
-    --server.port "$PORT" &
+# API 서버 시작 (백그라운드). 화면은 FastAPI 가 web/dist 를 정적 서빙한다.
+"$PYTHON" -m uvicorn api.main:app \
+    --host 127.0.0.1 \
+    --port "$PORT" \
+    --workers 1 \
+    --log-level warning &
 
 SERVER_PID=$!
 
