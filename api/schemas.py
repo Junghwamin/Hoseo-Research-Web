@@ -140,6 +140,11 @@ class DatasetInfo(BaseModel):
     years: list[int]
     regions: list[str]
     universityCount: int
+    #: 집계에 포함된 대학 이름 전체(가나다순).
+    #:
+    #: 화면이 목록에서 고르게 하려면 이름이 필요하다. 개수만 주면 자유 텍스트
+    #: 입력이 되고, 오타 한 번에 404 가 난다.
+    universities: list[str]
     # V14: '전국순위' 는 등재 사립 N개교 안에서의 순위다. 이 사실을 숨기지 않는다.
     nationalRankScopeNote: str
 
@@ -215,3 +220,52 @@ class ReportRequest(BaseModel):
     compareGroup: list[str] | None = None
     #: 화면에서 편집한 서술. 비어 있으면 그 절은 제목만 들어간다.
     narratives: dict[str, str] = Field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# 권역 대학 목록
+# ---------------------------------------------------------------------------
+
+
+class UniversityRow(BaseModel):
+    """권역 대학 한 곳의 그 해 지표."""
+
+    name: str
+    faculty: int
+    papers: float
+    perCapita: float
+    regionalRank: int | None
+    nationalRank: int | None
+
+
+class UniversitiesResponse(BaseModel):
+    """권역 안의 대학 전체. 비교군 후보 선택과 권역 막대차트가 함께 쓴다."""
+
+    regionName: str
+    year: int
+    rows: list[UniversityRow]
+
+
+# ---------------------------------------------------------------------------
+# 설정
+# ---------------------------------------------------------------------------
+
+
+class SettingsResponse(BaseModel):
+    """서버 설정 상태.
+
+    **키 값 자체는 절대 담지 않는다.** 브라우저로 내려가면 개발자 도구에
+    그대로 보인다. 설정됐는지와 어떻게 설정됐는지만 알린다.
+    """
+
+    apiKeyConfigured: bool
+    #: 키를 어디서 읽었는가 — "env" | "dotenv" | None
+    apiKeySource: str | None
+    #: 마스킹된 힌트. 예: "sk-…a1b2". 미설정이면 None
+    apiKeyHint: str | None
+    #: `.env` 에 쓸 수 있는가. 읽기 전용 배포에서는 False
+    canPersist: bool
+
+
+class ApiKeyRequest(BaseModel):
+    apiKey: str

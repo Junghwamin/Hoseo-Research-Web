@@ -4,6 +4,33 @@
  */
 
 export interface paths {
+    "/api/chart/{kind}.png": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Chart
+         * @description Word 보고서에 들어가는 것과 **같은** PNG 를 돌려준다.
+         *
+         *     화면 차트를 recharts 로 따로 그리면 사용자가 본 그림과 문서에 실리는
+         *     그림이 갈라진다. Streamlit 판은 같은 PNG 를 화면과 문서가 공유했고
+         *     ("5종 차트를 확인하세요. 보고서에 그대로 삽입됩니다"), 그 계약을 지킨다.
+         *
+         *     추이 차트만은 화면에서 인터랙티브(recharts)로도 보여준다 — 값을 짚어
+         *     읽는 용도다. 나머지 4종은 이 PNG 가 유일한 표현이다.
+         */
+        get: operations["get_chart_api_chart__kind__png_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/data": {
         parameters: {
             query?: never;
@@ -89,6 +116,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Settings */
+        get: operations["get_settings_api_settings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/api-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set Api Key */
+        post: operations["set_api_key_api_settings_api_key_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/stats": {
         parameters: {
             query?: never;
@@ -106,10 +167,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/universities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Region Universities
+         * @description 권역 안의 대학 전체와 그 해 지표.
+         *
+         *     비교군 후보를 고르는 화면과 권역 막대차트가 같은 데이터를 쓴다.
+         *     `/api/stats` 의 `compare` 는 **확정된 비교군만** 담으므로, 후보를 보여주려면
+         *     이게 따로 필요하다.
+         */
+        get: operations["get_region_universities_api_universities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** ApiKeyRequest */
+        ApiKeyRequest: {
+            /** Apikey */
+            apiKey: string;
+        };
         /**
          * Averages
          * @description 한 해의 평균 3종. 모집단이 비면 0.0 이 아니라 None 이다.
@@ -149,6 +239,8 @@ export interface components {
             nationalRankScopeNote: string;
             /** Regions */
             regions: string[];
+            /** Universities */
+            universities: string[];
             /** Universitycount */
             universityCount: number;
             /** Years */
@@ -233,6 +325,23 @@ export interface components {
             /** Year */
             year: number;
         };
+        /**
+         * SettingsResponse
+         * @description 서버 설정 상태.
+         *
+         *     **키 값 자체는 절대 담지 않는다.** 브라우저로 내려가면 개발자 도구에
+         *     그대로 보인다. 설정됐는지와 어떻게 설정됐는지만 알린다.
+         */
+        SettingsResponse: {
+            /** Apikeyconfigured */
+            apiKeyConfigured: boolean;
+            /** Apikeyhint */
+            apiKeyHint: string | null;
+            /** Apikeysource */
+            apiKeySource: string | null;
+            /** Canpersist */
+            canPersist: boolean;
+        };
         /** StatsRequest */
         StatsRequest: {
             /** Comparegroup */
@@ -288,6 +397,36 @@ export interface components {
             /** Regionalrank */
             regionalRank: number | null;
         };
+        /**
+         * UniversitiesResponse
+         * @description 권역 안의 대학 전체. 비교군 후보 선택과 권역 막대차트가 함께 쓴다.
+         */
+        UniversitiesResponse: {
+            /** Regionname */
+            regionName: string;
+            /** Rows */
+            rows: components["schemas"]["UniversityRow"][];
+            /** Year */
+            year: number;
+        };
+        /**
+         * UniversityRow
+         * @description 권역 대학 한 곳의 그 해 지표.
+         */
+        UniversityRow: {
+            /** Faculty */
+            faculty: number;
+            /** Name */
+            name: string;
+            /** Nationalrank */
+            nationalRank: number | null;
+            /** Papers */
+            papers: number;
+            /** Percapita */
+            perCapita: number;
+            /** Regionalrank */
+            regionalRank: number | null;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -332,6 +471,41 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    get_chart_api_chart__kind__png_get: {
+        parameters: {
+            query: {
+                university: string;
+                year: number;
+                region?: string | null;
+            };
+            header?: never;
+            path: {
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_dataset_info_api_data_get: {
         parameters: {
             query?: never;
@@ -471,6 +645,59 @@ export interface operations {
             };
         };
     };
+    get_settings_api_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsResponse"];
+                };
+            };
+        };
+    };
+    set_api_key_api_settings_api_key_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApiKeyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_stats_api_stats_post: {
         parameters: {
             query?: never;
@@ -491,6 +718,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StatsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_region_universities_api_universities_get: {
+        parameters: {
+            query: {
+                region: string;
+                year: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UniversitiesResponse"];
                 };
             };
             /** @description Validation Error */

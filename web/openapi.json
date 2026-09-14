@@ -1,6 +1,19 @@
 {
   "components": {
     "schemas": {
+      "ApiKeyRequest": {
+        "properties": {
+          "apiKey": {
+            "title": "Apikey",
+            "type": "string"
+          }
+        },
+        "required": [
+          "apiKey"
+        ],
+        "title": "ApiKeyRequest",
+        "type": "object"
+      },
       "Averages": {
         "description": "한 해의 평균 3종. 모집단이 비면 0.0 이 아니라 None 이다.",
         "properties": {
@@ -113,6 +126,13 @@
             "title": "Regions",
             "type": "array"
           },
+          "universities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Universities",
+            "type": "array"
+          },
           "universityCount": {
             "title": "Universitycount",
             "type": "integer"
@@ -129,6 +149,7 @@
           "years",
           "regions",
           "universityCount",
+          "universities",
           "nationalRankScopeNote"
         ],
         "title": "DatasetInfo",
@@ -358,6 +379,49 @@
         "title": "ReportRequest",
         "type": "object"
       },
+      "SettingsResponse": {
+        "description": "서버 설정 상태.\n\n**키 값 자체는 절대 담지 않는다.** 브라우저로 내려가면 개발자 도구에\n그대로 보인다. 설정됐는지와 어떻게 설정됐는지만 알린다.",
+        "properties": {
+          "apiKeyConfigured": {
+            "title": "Apikeyconfigured",
+            "type": "boolean"
+          },
+          "apiKeyHint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apikeyhint"
+          },
+          "apiKeySource": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apikeysource"
+          },
+          "canPersist": {
+            "title": "Canpersist",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "apiKeyConfigured",
+          "apiKeySource",
+          "apiKeyHint",
+          "canPersist"
+        ],
+        "title": "SettingsResponse",
+        "type": "object"
+      },
       "StatsRequest": {
         "properties": {
           "compareGroup": {
@@ -528,6 +592,86 @@
         "title": "TrendPoint",
         "type": "object"
       },
+      "UniversitiesResponse": {
+        "description": "권역 안의 대학 전체. 비교군 후보 선택과 권역 막대차트가 함께 쓴다.",
+        "properties": {
+          "regionName": {
+            "title": "Regionname",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/UniversityRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "year": {
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "regionName",
+          "year",
+          "rows"
+        ],
+        "title": "UniversitiesResponse",
+        "type": "object"
+      },
+      "UniversityRow": {
+        "description": "권역 대학 한 곳의 그 해 지표.",
+        "properties": {
+          "faculty": {
+            "title": "Faculty",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "nationalRank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nationalrank"
+          },
+          "papers": {
+            "title": "Papers",
+            "type": "number"
+          },
+          "perCapita": {
+            "title": "Percapita",
+            "type": "number"
+          },
+          "regionalRank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regionalrank"
+          }
+        },
+        "required": [
+          "name",
+          "faculty",
+          "papers",
+          "perCapita",
+          "regionalRank",
+          "nationalRank"
+        ],
+        "title": "UniversityRow",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -648,6 +792,81 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/chart/{kind}.png": {
+      "get": {
+        "description": "Word 보고서에 들어가는 것과 **같은** PNG 를 돌려준다.\n\n화면 차트를 recharts 로 따로 그리면 사용자가 본 그림과 문서에 실리는\n그림이 갈라진다. Streamlit 판은 같은 PNG 를 화면과 문서가 공유했고\n(\"5종 차트를 확인하세요. 보고서에 그대로 삽입됩니다\"), 그 계약을 지킨다.\n\n추이 차트만은 화면에서 인터랙티브(recharts)로도 보여준다 — 값을 짚어\n읽는 용도다. 나머지 4종은 이 PNG 가 유일한 표현이다.",
+        "operationId": "get_chart_api_chart__kind__png_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "university",
+            "required": true,
+            "schema": {
+              "title": "University",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "title": "Year",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "region",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Region"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Chart",
+        "tags": [
+          "report"
+        ]
+      }
+    },
     "/api/data": {
       "get": {
         "operationId": "get_dataset_info_api_data_get",
@@ -813,6 +1032,68 @@
         ]
       }
     },
+    "/api/settings": {
+      "get": {
+        "operationId": "get_settings_api_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/settings/api-key": {
+      "post": {
+        "operationId": "set_api_key_api_settings_api_key_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Api Key",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
     "/api/stats": {
       "post": {
         "operationId": "post_stats_api_stats_post",
@@ -849,6 +1130,58 @@
           }
         },
         "summary": "Post Stats",
+        "tags": [
+          "stats"
+        ]
+      }
+    },
+    "/api/universities": {
+      "get": {
+        "description": "권역 안의 대학 전체와 그 해 지표.\n\n비교군 후보를 고르는 화면과 권역 막대차트가 같은 데이터를 쓴다.\n`/api/stats` 의 `compare` 는 **확정된 비교군만** 담으므로, 후보를 보여주려면\n이게 따로 필요하다.",
+        "operationId": "get_region_universities_api_universities_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "region",
+            "required": true,
+            "schema": {
+              "title": "Region",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "title": "Year",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UniversitiesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Region Universities",
         "tags": [
           "stats"
         ]

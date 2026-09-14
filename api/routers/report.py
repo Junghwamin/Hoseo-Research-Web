@@ -253,3 +253,61 @@ def _build_charts(
             stats["compare"], year, university=university
         ),
     }
+
+
+# ---------------------------------------------------------------------------
+# /api/chart/{kind}.png
+# ---------------------------------------------------------------------------
+
+#: 차트 종류별 한국어 설명. 화면 캡션과 alt 텍스트에 쓴다.
+CHART_TITLES = {
+    "trend": "연도별 1인당 논문 수 추이",
+    "bar": "권역 내 전체 대학 비교",
+    "avg": "평균 대비 위치",
+    "rank": "순위 변화 추이",
+    "compare": "비교군 대학 비교",
+}
+
+
+@router.get("/chart/{kind}.png")
+def get_chart(
+    kind: str,
+    university: str,
+    year: int,
+    region: str | None = None,
+) -> Response:
+    """Word 보고서에 들어가는 것과 **같은** PNG 를 돌려준다.
+
+    화면 차트를 recharts 로 따로 그리면 사용자가 본 그림과 문서에 실리는
+    그림이 갈라진다. Streamlit 판은 같은 PNG 를 화면과 문서가 공유했고
+    ("5종 차트를 확인하세요. 보고서에 그대로 삽입됩니다"), 그 계약을 지킨다.
+
+    추이 차트만은 화면에서 인터랙티브(recharts)로도 보여준다 — 값을 짚어
+    읽는 용도다. 나머지 4종은 이 PNG 가 유일한 표현이다.
+    """
+    if kind not in schemas.CHART_KEYS:
+        raise HTTPException(
+            status_code=404,
+            detail=f"없는 차트 종류: {kind}. 가능: {list(schemas.CHART_KEYS)}",
+        )
+
+    national_df, regional_df, region_name, group = _resolve(
+        university, year, region, None
+    )
+    stats = _collect_stats(
+        national_df, regional_df, university, region_name, year, group
+    )
+
+    with _CHART_LOCK:
+        charts = _build_charts(regional_df, stats, university, region_name, year)
+
+    payload = charts[kind].getvalue()
+    return Response(
+        content=payload,
+        media_type="image/png",
+        headers={
+            # 같은 입력이면 같은 그림이다. 단계를 오갈 때마다 다시 그리면
+            # 한 장에 1초 가까이 걸리는 matplotlib 이 화면을 느리게 만든다.
+            "Cache-Control": "private, max-age=300",
+        },
+    )

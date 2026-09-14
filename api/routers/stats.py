@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import pandas as pd
 from fastapi import APIRouter
 
 import core.data_loader as dl
@@ -31,6 +32,10 @@ def get_dataset_info() -> schemas.DatasetInfo:
         years=years,
         regions=sorted(regional_df["권역명"].dropna().unique().tolist()),
         universityCount=count,
+        # 화면이 목록에서 고르게 하려면 이름이 필요하다. 전 연도 합집합을 주는
+        # 이유는, 특정 해에만 있는 대학(제주국제대는 2016~2025)도 고를 수
+        # 있어야 하기 때문이다 — 없는 해를 고르면 서버가 404 로 알려준다.
+        universities=sorted(national_df["학교명"].dropna().unique().tolist()),
         # V14. 사용자 결정은 "현행 유지 + 라벨 명시" 였다. 수치는 그대로 두되
         # 어떤 모집단인지를 API 가 반드시 알려준다.
         nationalRankScopeNote=(
@@ -127,4 +132,49 @@ def _to_yoy(raw: dict) -> schemas.YoYChanges:
         top=[e for e in (entry(r) for r in raw.get("상위", [])) if e],
         bottom=[e for e in (entry(r) for r in raw.get("하위", [])) if e],
         target=entry(raw.get("호서")),
+    )
+
+
+@router.get("/universities", response_model=schemas.UniversitiesResponse)
+def get_region_universities(region: str, year: int) -> schemas.UniversitiesResponse:
+    """권역 안의 대학 전체와 그 해 지표.
+
+    비교군 후보를 고르는 화면과 권역 막대차트가 같은 데이터를 쓴다.
+    `/api/stats` 의 `compare` 는 **확정된 비교군만** 담으므로, 후보를 보여주려면
+    이게 따로 필요하다.
+    """
+    national_df, regional_df = deps.get_frames()
+    deps.require_year(year, national_df)
+
+    regions = set(regional_df["권역명"].dropna().unique())
+    if region not in regions:
+        from fastapi import HTTPException
+
+        raise HTTPException(
+            status_code=404, detail=f"없는 권역이다: {region}. 가능: {sorted(regions)}"
+        )
+
+    rows = regional_df[
+        (regional_df["권역명"] == region) & (regional_df["연도"] == year)
+    ]
+    sort_col = "권역순위" if "권역순위" in rows.columns else "학교명"
+    rows = rows.sort_values([sort_col, "학교명"])
+
+    def _int_or_none(value) -> int | None:
+        return None if pd.isna(value) else int(value)
+
+    return schemas.UniversitiesResponse(
+        regionName=region,
+        year=year,
+        rows=[
+            schemas.UniversityRow(
+                name=str(r["학교명"]),
+                faculty=int(r["전임교원수"]),
+                papers=float(r["SCI/SCOPUS논문수"]),
+                perCapita=float(r["1인당논문수"]),
+                regionalRank=_int_or_none(r.get("권역순위")),
+                nationalRank=_int_or_none(r.get("전국순위")),
+            )
+            for _, r in rows.iterrows()
+        ],
     )

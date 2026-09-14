@@ -15,11 +15,22 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from dotenv import load_dotenv
 
-from api.routers import report, stats
+from api.routers import report, settings, stats
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 WEB_DIST = PROJECT_ROOT / "web" / "dist"
+
+# `.env` 를 환경변수로 올린다.
+#
+# README 와 인스톨러가 `.env` 를 안내하는데 이 호출이 없으면 **조용히
+# 무동작**이다 — 사용자는 키를 넣었는데 "설정되지 않았다" 는 503 을 본다.
+# Streamlit 판은 app.py 에서 매 run 마다 했고, 이관 과정에서 빠졌었다.
+#
+# `override=False` 라 이미 설정된 환경변수가 우선한다. 배포 환경에서 주입한
+# 값을 파일이 덮어쓰면 안 된다.
+load_dotenv(PROJECT_ROOT / ".env", override=False)
 
 app = FastAPI(
     title="연구실적 분석 포털 API",
@@ -29,6 +40,7 @@ app = FastAPI(
 
 app.include_router(stats.router)
 app.include_router(report.router)
+app.include_router(settings.router)
 
 
 @app.get("/api/health")
