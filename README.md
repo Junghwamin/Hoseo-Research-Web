@@ -1,117 +1,101 @@
-# 호서대학교 - 연구실적 분석 포털
+# 호서대학교 — 연구실적 분석 포털 (Web)
 
-대학알리미 원시 데이터(Excel)를 자동 전처리하고, GPT-4o 기반 서술 생성 + matplotlib 차트 + python-docx Word 보고서를 자동 생성하는 **Streamlit 웹 앱**입니다.
+대학알리미 원시 데이터(Excel)를 전처리하고, 권역·비교군 기준으로 분석해
+GPT-4o 서술과 matplotlib 차트가 들어간 Word 보고서를 만든다.
+
+**FastAPI + React** 구성이다. [Streamlit 판](https://github.com/Junghwamin/Hoseo-Research)을
+이어받았으며, 통계·전처리·보고서 생성 로직(`core/`)은 그대로 가져왔다.
 
 ## 주요 기능
 
-- **원시 데이터 자동 전처리**: 대학알리미 Excel → 전임교원수, SCI/SCOPUS 논문수 추출, 캠퍼스 합산, 순위 산출
-- **구형/신형 포맷 모두 지원**: 2016~2026년 대학알리미 엑셀 형식 자동 감지
-- **5단계 Step-by-Step 워크플로우**: 데이터 설정 → 통계 확인 → 그래프 검토 → GPT 서술 → 보고서 생성
-- **GPT-4o 서술 자동 생성**: 섹션별 분석 텍스트를 AI가 작성, 직접 편집 가능
-- **차트 5종 자동 생성**: 연도별 추이, 평균 비교, 충청권 비교, 순위 변화, 비교군 현황
-- **Word 보고서 자동 조립**: 표지 + 5개 섹션(표/차트/서술 포함) → `.docx` 다운로드
+- **전처리 자동화**: 대학알리미 Excel(2016~2026)을 읽어 1인당 논문 수와 순위를 산출
+- **구형/신형 포맷 모두 지원**: 연도별로 다른 헤더 구조를 자동 감지
+- **권역 분석**: 전국 6개 권역 중 대상 대학이 속한 권역을 서버가 판정
+- **GPT-4o 서술**: 추이·비교·권역·증감 4종. 생성 후 직접 편집 가능
+- **Word 보고서**: 표 3개 + 차트 5장 + 서술 4절
 
 ## 빠른 시작
 
-### 설치
-
 ```bash
-# Python 3.12 권장 (Streamlit Cloud 의 runtime.txt 와 동일)
+# 1) 파이썬 의존성
 pip install -r requirements.txt
+
+# 2) 프론트엔드 빌드 (최초 1회, 또는 화면을 고친 뒤)
+cd web && npm ci && npm run build && cd ..
+
+# 3) 서버 실행
+uvicorn api.main:app --port 8000
 ```
 
-### 실행
+브라우저에서 http://127.0.0.1:8000 접속. FastAPI 가 `web/dist` 를 함께 서빙하므로
+서버 하나면 된다.
+
+### 개발 중에는
 
 ```bash
-# 프로젝트 루트에서 실행 (필수)
-streamlit run report_app/app.py
+uvicorn api.main:app --reload --port 8000   # 터미널 1
+cd web && npm run dev                        # 터미널 2 → http://127.0.0.1:5173
 ```
 
-또는 `start_app.bat` 더블클릭으로 바로 실행
+Vite 개발 서버가 `/api` 요청을 8000번으로 프록시한다.
 
-브라우저에서 http://localhost:8501 접속
+### API Key
 
-### API Key 설정
+GPT 서술을 쓰려면 `OPENAI_API_KEY` 가 필요하다. **평면 키**로 넣는다.
 
-앱 사이드바에서 OpenAI API Key 입력 후 저장 버튼 클릭 (`.env`에 자동 저장)
+```bash
+# .env 또는 환경변수
+OPENAI_API_KEY=sk-...
+```
+
+키는 **서버에만 있다.** 브라우저로 내려가지 않으며, 프론트는 "설정됨/미설정"
+여부만 안다. 키 없이도 전처리·통계·차트·보고서(서술 없는)는 전부 동작한다.
 
 ## 앱 워크플로우 (5단계)
 
-```
-1단계: 전처리·데이터 설정
-  ├─ [원시 데이터 전처리] 대학알리미 xlsx 업로드 → 전처리 실행 → CSV 자동 생성
-  ├─ [전처리 결과 CSV 업로드] 이미 전처리된 CSV 직접 업로드
-  └─ [기존 output/ 폴더 사용] 기존 CSV 파일 바로 사용
-
-2단계: 통계 확인
-  └─ 요약 카드, 연도별 수치표, 비교군 표, 전년대비 증감 검토
-
-3단계: 그래프 검토
-  └─ 5종 차트 탭별 확인 (PNG 개별 저장 가능)
-
-4단계: GPT 서술 생성 및 편집
-  └─ 섹션별 [GPT 생성] 버튼 → text_area에서 직접 편집
-
-5단계: 보고서 생성
-  └─ [Word 보고서 생성] → .docx 다운로드
-```
-
-## 생성 보고서 구조
-
-| 섹션 | 내용 |
-|------|------|
-| 표지 | 대학명, 제목, 기준연도, 생성일 |
-| 1. 연도별 추이 | GPT 서술 + 수치표 + 라인차트 |
-| 2. 평균 비교 | GPT 서술 + 수평 바차트 |
-| 3. 충청권 비교 | GPT 서술 + 막대차트 + 순위변화차트 |
-| 4. 비교군 현황 | 5개교 비교표 + 막대차트 |
-| 5. 전년대비 증감 | GPT 서술 + 증감 상위/하위 표 |
+| 단계 | 하는 일 |
+|---|---|
+| 1. 데이터 설정 | 대상 대학·기준 연도 선택. 권역은 서버가 자동 판정 |
+| 2. 통계 확인 | 전국순위·권역순위·1인당논문수·전임교원수 |
+| 3. 그래프 검토 | 추이 차트, 비교군 표, 전년 대비 증감 |
+| 4. GPT 서술 | 4종 일괄 생성 후 편집. 단계를 오가도 사라지지 않는다 |
+| 5. 보고서 생성 | Word 파일 내려받기 |
 
 ## 디렉토리 구조
 
 ```
-Hoseo-Research/
-├── README.md                              ← 이 파일
-├── requirements.txt                       ← Python 의존 라이브러리
-├── requirements-dev.txt                   ← 테스트 전용 의존성 (pytest)
-├── pytest.ini                             ← pytest 설정 (마커, xfail_strict)
-├── start_app.bat                          ← 앱 바로 실행 런처
-├── .env                                   ← OpenAI API Key (git 제외)
-├── 전임교원_연구실적_전처리.py            ← 전처리 스크립트 (앱 내에서도 호출)
+Hoseo-Research-Web/
+├── core/                       ← 계산 로직. UI 프레임워크에 의존하지 않는다
+│   ├── config.py               ← 대학명·비교군·경로·GPT 설정
+│   ├── preprocess.py           ← 대학알리미 Excel → CSV
+│   ├── data_loader.py          ← CSV 로드 + 통계 계산
+│   ├── chart_generator.py      ← matplotlib 차트 5종 (보고서용)
+│   ├── gpt_reporter.py         ← OpenAI 서술 생성
+│   └── report_builder.py       ← python-docx 보고서 조립
 │
-├── report_app/                            ← Streamlit 앱 모듈
-│   ├── app.py                             ← 메인 앱 (5단계 워크플로우)
-│   ├── config.py                          ← 대학명, 비교군, 경로, GPT 설정
-│   ├── data_loader.py                     ← CSV 로드 + 통계 계산
-│   ├── chart_generator.py                 ← matplotlib 차트 5종 생성
-│   ├── gpt_reporter.py                    ← OpenAI API 섹션별 서술 생성
-│   └── report_builder.py                  ← python-docx Word 보고서 조립
+├── api/                        ← FastAPI. core/ 를 감싸기만 한다
+│   ├── main.py                 ← 진입점 + web/dist 정적 서빙
+│   ├── deps.py                 ← 모집단 판정(권역·비교군)
+│   ├── schemas.py              ← 응답 계약. 한글 키 → 영문 키 번역
+│   └── routers/                ← stats, report
 │
-├── Raw data/                              ← 대학알리미 원본 Excel 파일
-│   ├── 2016년_...xlsx ~ 2022년_...xlsx    ← 구형 포맷 (하위 헤더 없음)
-│   └── 2023년_...xlsx ~ 2025년_...xlsx    ← 신형 포맷
+├── web/                        ← React + TypeScript + Vite
+│   ├── src/
+│   │   ├── api/                ← 생성된 타입 + 클라이언트
+│   │   ├── components/         ← MetricCard, TrendChart, CompareTable, YoYPanel …
+│   │   ├── routes/Wizard.tsx   ← 5단계 화면
+│   │   ├── store/              ← 순수 리듀서 상태 관리
+│   │   └── styles/tokens.css   ← 디자인 토큰 단일 소스
+│   ├── e2e/                    ← Playwright
+│   └── dist/                   ← 빌드 산출물 (FastAPI 가 서빙)
 │
-├── tests/                                 ← pytest 스위트 (340개)
-│   ├── conftest.py                        ← 샌드박스 cwd, matplotlib, 환경 격리
-│   ├── unit/                              ← 순수 함수 단위 테스트
-│   ├── contract/                          ← 모듈 간 키·컬럼 계약
-│   ├── integration/                       ← 실데이터 골든 회귀
-│   ├── apptest/                           ← streamlit.testing.v1 UI 테스트
-│   └── manual/CHECKLIST.md                ← 자동화 불가 항목 수동 체크리스트
+├── tests/                      ← pytest (unit / contract / integration / api)
+├── scripts/                    ← 번들 시뮬레이션, 설치본 검증, OpenAPI 내보내기
+├── installer/                  ← Windows(Inno Setup) · macOS(.app) 빌드
 │
-├── docs/
-│   └── QA_REVIEW_REPORT.md                ← 코드 리뷰 및 검증 보고서
-│
-├── config/                                ← 전처리 설정 파일
-│   ├── universities.json                  ← 대학 정보 및 캠퍼스 매핑 (136개교)
-│   └── regions.json                       ← 지역별 대학 리스트 (충청권 27개교)
-│
-└── output/                                ← 결과 파일 (자동 생성)
-    ├── 전임교원_연구실적_전처리결과.xlsx
-    ├── 전체_대학_데이터.csv
-    ├── 권역별_순위.csv
-    ├── 충청권_순위.csv   # 레거시 (하위 호환)
-    └── reports/                           ← 생성된 Word 보고서
+├── config/                     ← universities.json, regions.json
+├── Raw data/                   ← 대학알리미 원본 Excel
+└── output/                     ← 전처리 결과 CSV·xlsx
 ```
 
 ## 데이터 구조
@@ -119,88 +103,91 @@ Hoseo-Research/
 ### `output/전체_대학_데이터.csv`
 
 | 연도 | 학교명 | 전임교원수 | SCI/SCOPUS논문수 | 1인당논문수 | 전국순위 |
-|------|--------|------------|-------------------|-------------|----------|
+|---|---|---|---|---|---|
 
-### `output/권역별_순위.csv` (현행 포맷)
+### `output/권역별_순위.csv`
 
 | 연도 | 학교명 | 전임교원수 | SCI/SCOPUS논문수 | 1인당논문수 | 권역명 | 권역순위 | 전국순위 |
 |---|---|---|---|---|---|---|---|
 
 6개 권역 전체를 담는다. 다중 캠퍼스 대학은 권역마다 한 행씩 나타난다.
-인코딩은 UTF-8 with BOM(utf-8-sig)이다.
+인코딩은 UTF-8 with BOM(utf-8-sig).
 
-### `output/충청권_순위.csv` (레거시, 하위 호환용)
+> **전국순위의 범위.** 대학알리미에 등재된 **사립 대학만** 집계한다.
+> 국공립대·과기원은 포함되지 않는다. API 의 `/api/data` 가
+> `nationalRankScopeNote` 로 이 사실을 함께 돌려주고 화면에도 표시한다.
 
-| 연도 | 학교명 | 전임교원수 | SCI/SCOPUS논문수 | 1인당논문수 | 충청권순위 | 전국순위 |
-|---|---|---|---|---|---|---|
+## API
 
-읽을 때 자동으로 신형으로 변환된다. 새 코드는 권역별_순위.csv 를 쓸 것.
+| 메서드 | 경로 | 하는 일 |
+|---|---|---|
+| `GET` | `/api/data` | 연도·권역 목록, 집계 대학 수, 순위 범위 안내 |
+| `GET` | `/api/regions?university=` | 대학이 속한 권역(다중 캠퍼스는 복수) |
+| `POST` | `/api/stats` | 추이·평균·순위변화·비교군·증감 |
+| `POST` | `/api/narrative` | GPT 서술 4종 (일부 실패해도 나머지 반환) |
+| `POST` | `/api/report` | Word 파일 (메모리 생성, 디스크에 남기지 않음) |
 
-> **전국순위의 의미**: `config/universities.json` 에 등재된 대학만 순위에
-> 참여한다. 2025년 기준 134개교가 남고 전원 사립이다. 국립·공립·과기원은
-> 제외되며 전임교원의 약 30.9% 가 빠진다. 따라서 '전국순위'와 '전국평균'은
-> **등재 사립 134개교 기준**이다.
-
-
-### 처리 과정
-
-```
-[1/5] 설정 파일 로드 (universities.json, regions.json)
-[2/5] Raw 데이터 파일 스캔 (연도 패턴 자동 감지)
-[3/5] 연도별 데이터 처리 (헤더 자동 탐지 → 필터링 → 캠퍼스 합산 → 1인당 계산)
-[4/5] 순위 계산 (전국 + 충청권)
-[5/5] 결과 저장 (Excel + CSV)
-```
-
-### 처리 규칙
-
-- **대학 필터링**: 학교종류 "대학교"만 포함 (사이버대/전문대/원격대 제외)
-- **캠퍼스 통합**: `universities.json`의 aliases 기반 자동 합산
-- **분교 처리**: `is_branch: true` 설정 시 독립 대학으로 취급
-- **컬럼 자동 감지**: 키워드 기반으로 헤더 위치 자동 탐지 (구형/신형 포맷 모두 지원)
-
-## 기술 스택
-
-| 라이브러리 | 용도 |
-|---|---|
-| streamlit | 웹 앱 프레임워크 |
-| pandas | 데이터 처리 |
-| openpyxl | Excel 읽기/쓰기 |
-| matplotlib | 차트 생성 (Malgun Gothic 한글 폰트) |
-| openai | GPT-4o 서술 생성 |
-| python-docx | Word 보고서 조립 |
-| python-dotenv | API Key 환경변수 관리 |
+서버 실행 후 http://127.0.0.1:8000/docs 에서 직접 호출해 볼 수 있다.
 
 ## 테스트
 
 ```bash
-pip install -r requirements.txt -r requirements-dev.txt
-pytest -q                       # 전체 (실제 GPT 호출 제외)
-pytest -q -m "not realdata"     # 실데이터 골든 제외, 빠름
-pytest -q tests/apptest         # UI 테스트만
+pytest -q                      # core + api
+cd web
+npm test                       # 컴포넌트 + 접근성(axe)
+npm run e2e                    # Playwright (서버를 자동 기동)
+npm run build                  # 타입검사 + 빌드 + 번들 예산
+npm run storybook              # 컴포넌트 격리 확인
 ```
 
-마커는 `realdata`(추적 중인 Raw/output 사용), `slow`, `live`(실제 OpenAI 호출,
-기본 제외), `characterization`(현재 동작 기록), `needs_refactor` 다.
+### 이 저장소의 테스트 규약
 
-`xfail_strict = true` 라서 **결함 잠금 테스트가 예상외로 통과하면 실패로
-떨어진다**. 남아 있는 `xfailed` 12건은 의도적으로 고치지 않은 항목이며,
-그중 하나라도 통과로 바뀌면 어떤 수정이 의도한 범위를 넘었다는 신호다.
-자세한 내용은 `docs/QA_REVIEW_REPORT.md` 를 참고한다.
+- **테스트를 고쳐서 green 을 만드는 것은 실패다.** 구현이 틀렸는지 먼저 본다.
+- **완료 기준은 `failed 0` 이 아니다.** 결함을 고치면 그 결함의
+  `@pytest.mark.characterization` 테스트는 반드시 깨진다.
+- `xfail_strict = true`. 남은 `xfailed` 6건은 의도적으로 고치지 않은 항목이며,
+  하나라도 통과로 바뀌면 어떤 수정이 범위를 넘었다는 신호다.
+- 디자인 값(색·간격·radius)은 `web/src/styles/tokens.css` 밖에 존재하지 않는다.
+  `tokens.test.ts` 가 소스를 스캔해 위반을 파일:줄까지 잡는다.
 
-푸시하면 `.github/workflows/test.yml` 이 Ubuntu + Python 3.11 에서 같은
-스위트를 실행한다.
+## 인스톨러
+
+개발 PC 에서 빌드하고, 설치본은 **완전 오프라인**으로 동작한다.
+Node 런타임은 사용자 PC 에 필요 없다 — `npm run build` 결과물만 들어간다.
+
+```bash
+cd web && npm run build && cd ..          # 화면 먼저
+python installer/windows/build_windows.py # 임베디드 파이썬 + 의존성 번들
+# 이후 Inno Setup 으로 installer/windows/setup.iss 컴파일
+
+python scripts/verify_built_bundle.py     # 빌드된 번들을 실제로 띄워 관통 확인
+```
+
+`scripts/simulate_bundle.py` 는 임베디드 파이썬 없이 파일 구성만 빠르게 검증한다.
+
+## 기술 스택
+
+| 영역 | 사용 |
+|---|---|
+| 서버 | FastAPI, uvicorn |
+| 화면 | React 19, TypeScript, Vite, Tailwind CSS 4 |
+| 차트 | recharts(화면), matplotlib(보고서) |
+| 3D | three.js (홈 히어로만, 지연 로딩) |
+| 데이터 | pandas, openpyxl |
+| 문서 | python-docx |
+| AI | OpenAI GPT-4o |
+| 테스트 | pytest, Vitest, Testing Library, Playwright, Storybook, axe |
 
 ## 문제 해결
 
 | 증상 | 해결 |
-|------|------|
-| matplotlib 한글 깨짐 | `rcParams["font.family"] = "Malgun Gothic"` (Windows) |
+|---|---|
+| 화면이 비어 있다 | `cd web && npm run build` 를 먼저 했는지 확인 |
+| `데이터 파일이 없다` (503) | `python -c "from core.preprocess import main; main()"` 로 전처리 |
+| GPT 서술이 503 | `OPENAI_API_KEY` 를 **평면 키**로 설정. `[openai]` 테이블 형식은 인식되지 않는다 |
+| 한글 폰트 깨짐 (차트) | Windows 는 맑은 고딕, Linux 는 `fonts-nanum` 설치 |
 | CSV 한글 깨짐 | `encoding="utf-8-sig"` 사용 |
-| 컬럼 탐지 실패 | 구형 포맷은 자동 폴백 지원, 그래도 실패 시 `find_columns()` 키워드 조정 |
-| GPT-4o 미사용 계정 | `config.py`에서 `GPT_MODEL = "gpt-4"`로 변경 |
-| Streamlit 실행 오류 | 반드시 프로젝트 루트에서 실행 |
-| 사이드바에 빈 페이지 링크 | `.streamlit/config.toml` 의 `showSidebarNavigation = false` 확인 |
+| 컬럼 탐지 실패 | 구형 포맷은 자동 폴백. 그래도 실패하면 `find_columns()` 키워드 조정 |
 | 테스트가 `xpassed` 로 실패 | 의도적 xfail 이 통과한 것. 수정 범위가 넘쳤는지 확인 |
 
 ## 라이선스 (License)
@@ -209,17 +196,5 @@ pytest -q tests/apptest         # UI 테스트만
 
 **Copyright (c) 2026 정화민 (Junghwamin). All rights reserved.**
 
-본 소프트웨어는 [PolyForm Noncommercial License 1.0.0](./LICENSE) 하에 배포됩니다.
-
-- ✅ **허용**: 연구, 교육, 학술, 개인 학습, 비영리 기관 사용, 수정 및 재배포 (비상업적 목적에 한함)
-- ❌ **금지**: 상업적 이용 (상업적 이익이나 금전적 보상을 주된 목적으로 하는 모든 사용)
-- 📌 **인용 필수**: 본 코드를 사용한 연구물 발표 시 [`CITATION.cff`](./CITATION.cff)에 따른 인용 표기 요청
-
-상업적 사용을 원하시는 경우 별도의 라이선스 협의가 필요합니다. [GitHub Issues](https://github.com/Junghwamin/Hoseo-Research/issues)를 통해 문의해 주세요.
-
-전체 라이선스 조항은 [`LICENSE`](./LICENSE) 및 [`NOTICE`](./NOTICE) 파일을 참조하시기 바랍니다.
-
----
-
-This software is licensed under the [PolyForm Noncommercial License 1.0.0](./LICENSE).
-Commercial use is strictly prohibited without prior written consent from the copyright holder.
+비영리 목적에 한해 사용할 수 있다. 상업적 사용은 사전 서면 동의 없이 금지된다.
+자세한 내용은 [LICENSE](LICENSE) 참조.
