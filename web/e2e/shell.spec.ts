@@ -1,10 +1,10 @@
 import { test, expect } from '@playwright/test'
 
 /**
- * Phase 1 게이트: 검증 루프가 실제로 도는지 확인한다.
+ * 화면 게이트(계획 §7.3).
  *
- * 여기서 잠그는 계약 하나는 Phase 5 이후에도 유효하다 —
- * **꺼진 기능은 DOM 에 존재하지 않는다**(계획 §6·§12-4).
+ * Phase 4 부터는 **실제 API** 를 물고 돈다. 하드코딩 더미로는 계약이 맞는지
+ * 알 수 없어서다. 여기서 잠그는 수치는 원본 Streamlit 판과 대조해 확인한 값이다.
  */
 
 test('앱이 예외 없이 뜨고 제목을 보여준다', async ({ page }) => {
@@ -14,13 +14,13 @@ test('앱이 예외 없이 뜨고 제목을 보여준다', async ({ page }) => {
   await page.goto('/')
 
   await expect(page.getByRole('heading', { name: '연구실적 분석 포털' })).toBeVisible()
+  await expect(page.getByTestId('api-error')).toHaveCount(0)
   expect(errors, `콘솔 예외: ${errors.join(' / ')}`).toEqual([])
 })
 
 test('미구현 모듈은 DOM 에 아예 없다', async ({ page }) => {
   await page.goto('/')
 
-  // 구현된 것만 보인다
   await expect(page.getByTestId('module-research')).toBeVisible()
 
   // 흐리게 보이는 것도 아니고, 존재 자체가 없어야 한다.
@@ -45,18 +45,44 @@ test('테마를 바꾸면 data-theme 이 바뀌고 새로고침 후에도 유지
   await expect(page.locator('html')).not.toHaveAttribute('data-theme', /.+/)
 })
 
-test('증감 배지가 방향을 올바르게 표시한다 (V09 회귀 잠금)', async ({ page }) => {
+test('API 에서 받은 실제 수치를 그린다', async ({ page }) => {
   await page.goto('/')
 
-  // 전국순위 71위 / +6계단 = 개선
-  const card = page.locator('[data-testid="metric-delta"]').first()
-  await expect(card).toHaveAttribute('data-direction', 'up')
-  await expect(card).toContainText('▲')
-  await expect(card).toContainText('+6계단')
+  // 2026년 호서대: 전국 71위 / 권역 17위 / 1인당 0.1297편 / 교원 406명
+  // 원본 Streamlit 판과 대조해 확인한 값이다.
+  await expect(page.getByText('71위')).toBeVisible()
+  await expect(page.getByText('17위')).toBeVisible()
+  await expect(page.getByText('0.1297편')).toBeVisible()
+  await expect(page.getByText('406명')).toBeVisible()
+
+  await expect(page.getByText('호서대학교 · 충청권 · 2026년')).toBeVisible()
 })
 
-test('값 없음과 0 을 구분해 표시한다', async ({ page }) => {
+test('순위 개선을 상승으로 표시한다 (V09 회귀 잠금)', async ({ page }) => {
   await page.goto('/')
-  // 권역순위는 데이터 없음 → '—'
-  await expect(page.getByText('—')).toBeVisible()
+
+  // 2025년 77위 → 2026년 71위 = 6계단 개선.
+  // Streamlit 판은 이걸 빨간 하락 화살표로 표시했다.
+  const nationalDelta = page.getByTestId('metric-delta').first()
+  await expect(nationalDelta).toHaveAttribute('data-direction', 'up')
+  await expect(nationalDelta).toContainText('▲')
+  await expect(nationalDelta).toContainText('+6계단')
+})
+
+test('전국순위 모집단을 화면에 밝힌다 (V14)', async ({ page }) => {
+  await page.goto('/')
+  // 사용자 결정은 "현행 유지 + 라벨 명시" 였다. 라벨이 실제로 떠야 한다.
+  await expect(page.getByText(/등재된 사립 \d+개교 기준/)).toBeVisible()
+})
+
+test('추이 차트가 접근 가능한 표를 함께 제공한다', async ({ page }) => {
+  await page.goto('/')
+
+  const chart = page.getByRole('img', { name: /1인당 논문 수 추이/ })
+  await expect(chart).toBeVisible()
+
+  // SVG 는 스크린리더가 못 읽는다. 같은 수치가 표에도 있어야 한다.
+  const table = page.getByRole('table')
+  await expect(table).toContainText('2026년')
+  await expect(table).toContainText('0.1297')
 })

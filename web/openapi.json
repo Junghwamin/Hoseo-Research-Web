@@ -1,0 +1,661 @@
+{
+  "components": {
+    "schemas": {
+      "Averages": {
+        "description": "한 해의 평균 3종. 모집단이 비면 0.0 이 아니라 None 이다.",
+        "properties": {
+          "compareGroup": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comparegroup"
+          },
+          "national": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "National"
+          },
+          "regional": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regional"
+          }
+        },
+        "title": "Averages",
+        "type": "object"
+      },
+      "CompareRow": {
+        "description": "비교군 표의 한 행.",
+        "properties": {
+          "faculty": {
+            "title": "Faculty",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "nationalRank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nationalrank"
+          },
+          "papers": {
+            "title": "Papers",
+            "type": "number"
+          },
+          "perCapita": {
+            "title": "Percapita",
+            "type": "number"
+          },
+          "regionalRank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regionalrank"
+          }
+        },
+        "required": [
+          "name",
+          "faculty",
+          "papers",
+          "perCapita"
+        ],
+        "title": "CompareRow",
+        "type": "object"
+      },
+      "DatasetInfo": {
+        "description": "어떤 데이터로 계산했는지. 화면 라벨의 근거가 된다.",
+        "properties": {
+          "nationalRankScopeNote": {
+            "title": "Nationalrankscopenote",
+            "type": "string"
+          },
+          "regions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Regions",
+            "type": "array"
+          },
+          "universityCount": {
+            "title": "Universitycount",
+            "type": "integer"
+          },
+          "years": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Years",
+            "type": "array"
+          }
+        },
+        "required": [
+          "years",
+          "regions",
+          "universityCount",
+          "nationalRankScopeNote"
+        ],
+        "title": "DatasetInfo",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "RankChange": {
+        "description": "순위와 그 변화.\n\n**부호 규약: 양수 = 개선.** 순위는 작아지는 것이 개선이므로\n`이전순위 - 현재순위` 다. V09 가 이 규약을 화면에서 한 번 더 뒤집어\n개선을 하락으로 표시했던 결함이다. 여기서 못박고 프론트는 그대로 쓴다.",
+        "properties": {
+          "nationalRank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nationalrank"
+          },
+          "nationalRankDelta": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nationalrankdelta"
+          },
+          "regionalRank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regionalrank"
+          },
+          "regionalRankDelta": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regionalrankdelta"
+          }
+        },
+        "title": "RankChange",
+        "type": "object"
+      },
+      "RegionsResponse": {
+        "description": "대학이 속한 권역들. 다중 캠퍼스는 2개 이상이 나온다.",
+        "properties": {
+          "regions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Regions",
+            "type": "array"
+          },
+          "university": {
+            "title": "University",
+            "type": "string"
+          }
+        },
+        "required": [
+          "university",
+          "regions"
+        ],
+        "title": "RegionsResponse",
+        "type": "object"
+      },
+      "StatsRequest": {
+        "properties": {
+          "compareGroup": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comparegroup"
+          },
+          "regionName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regionname"
+          },
+          "university": {
+            "title": "University",
+            "type": "string"
+          },
+          "year": {
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "university",
+          "year"
+        ],
+        "title": "StatsRequest",
+        "type": "object"
+      },
+      "StatsResponse": {
+        "properties": {
+          "averages": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Averages"
+            },
+            "title": "Averages",
+            "type": "object"
+          },
+          "compare": {
+            "items": {
+              "$ref": "#/components/schemas/CompareRow"
+            },
+            "title": "Compare",
+            "type": "array"
+          },
+          "compareGroup": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Comparegroup",
+            "type": "array"
+          },
+          "compareGroupNote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comparegroupnote"
+          },
+          "rankChanges": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/RankChange"
+            },
+            "title": "Rankchanges",
+            "type": "object"
+          },
+          "regionName": {
+            "title": "Regionname",
+            "type": "string"
+          },
+          "trend": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/TrendPoint"
+            },
+            "title": "Trend",
+            "type": "object"
+          },
+          "university": {
+            "title": "University",
+            "type": "string"
+          },
+          "year": {
+            "title": "Year",
+            "type": "integer"
+          },
+          "yoy": {
+            "$ref": "#/components/schemas/YoYChanges"
+          }
+        },
+        "required": [
+          "university",
+          "year",
+          "regionName",
+          "compareGroup",
+          "trend",
+          "averages",
+          "rankChanges",
+          "compare",
+          "yoy"
+        ],
+        "title": "StatsResponse",
+        "type": "object"
+      },
+      "TrendPoint": {
+        "description": "한 해의 대상 대학 실적.",
+        "properties": {
+          "faculty": {
+            "title": "Faculty",
+            "type": "integer"
+          },
+          "nationalRank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nationalrank"
+          },
+          "papers": {
+            "title": "Papers",
+            "type": "number"
+          },
+          "perCapita": {
+            "title": "Percapita",
+            "type": "number"
+          },
+          "regionalRank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regionalrank"
+          }
+        },
+        "required": [
+          "papers",
+          "faculty",
+          "perCapita"
+        ],
+        "title": "TrendPoint",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "YoYChanges": {
+        "properties": {
+          "bottom": {
+            "items": {
+              "$ref": "#/components/schemas/YoYEntry"
+            },
+            "title": "Bottom",
+            "type": "array"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/YoYEntry"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "top": {
+            "items": {
+              "$ref": "#/components/schemas/YoYEntry"
+            },
+            "title": "Top",
+            "type": "array"
+          }
+        },
+        "title": "YoYChanges",
+        "type": "object"
+      },
+      "YoYEntry": {
+        "description": "전년 대비 증감 한 건.",
+        "properties": {
+          "baseValue": {
+            "title": "Basevalue",
+            "type": "number"
+          },
+          "changeRate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changerate"
+          },
+          "compareValue": {
+            "title": "Comparevalue",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "baseValue",
+          "compareValue"
+        ],
+        "title": "YoYEntry",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "대학알리미 전임교원 연구실적 분석. core/ 의 순수 함수를 감싼다.",
+    "title": "연구실적 분석 포털 API",
+    "version": "6.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/data": {
+      "get": {
+        "operationId": "get_dataset_info_api_data_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Dataset Info",
+        "tags": [
+          "stats"
+        ]
+      }
+    },
+    "/api/health": {
+      "get": {
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Health Api Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    },
+    "/api/regions": {
+      "get": {
+        "operationId": "get_regions_api_regions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "university",
+            "required": true,
+            "schema": {
+              "title": "University",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegionsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Regions",
+        "tags": [
+          "stats"
+        ]
+      }
+    },
+    "/api/stats": {
+      "post": {
+        "operationId": "post_stats_api_stats_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Stats",
+        "tags": [
+          "stats"
+        ]
+      }
+    },
+    "/{full_path}": {
+      "get": {
+        "operationId": "spa__full_path__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "full_path",
+            "required": true,
+            "schema": {
+              "title": "Full Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Spa"
+      }
+    }
+  }
+}

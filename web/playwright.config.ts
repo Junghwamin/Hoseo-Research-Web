@@ -26,10 +26,21 @@ export default defineConfig({
     { name: 'mobile', use: { ...devices['Pixel 7'] } },
   ],
 
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://127.0.0.1:5173',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  // 프론트와 API 를 둘 다 띄운다. 사람이 미리 켜 두는 것을 잊으면
+  // 테스트가 '환경 탓' 으로 실패해 신호가 흐려진다.
+  webServer: [
+    {
+      command: '../.venv/Scripts/python.exe -m uvicorn api.main:app --host 127.0.0.1 --port 8000',
+      cwd: '..',
+      url: 'http://127.0.0.1:8000/api/health',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+    {
+      command: 'npm run dev',
+      url: 'http://127.0.0.1:5173',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+  ],
 })

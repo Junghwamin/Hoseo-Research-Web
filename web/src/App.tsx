@@ -1,13 +1,17 @@
+import { useEffect, useState } from 'react'
+
+import { api, ApiError, byYear, type DatasetInfo, type StatsResponse } from './api/client'
 import { MetricCard } from './components/MetricCard/MetricCard'
+import type { DeltaDirection } from './components/MetricCard/types'
+import { TrendChart } from './components/TrendChart/TrendChart'
 import { FEATURES } from './features'
 import { useTheme } from './theme/useTheme'
 
 /**
- * Phase 1 확인용 셸.
+ * Phase 4 확인용 화면.
  *
- * 이 화면의 목적은 "검증 루프가 실제로 도는가" 뿐이다. 실제 5단계 화면은
- * Phase 5 에서 붙인다. 다만 **꺼진 기능은 렌더 트리에 올리지 않는다**는
- * 규칙(§12-4)은 여기서부터 지킨다.
+ * 실제 5단계 마법사는 Phase 5 에서 붙인다. 여기서는 **API 에 붙은 컴포넌트가
+ * 진짜 데이터로 그려지는지** 를 본다 — 하드코딩 더미로는 계약이 맞는지 알 수 없다.
  */
 const MODULES = [
   { key: 'research', label: '연구실적', icon: '📊' },
@@ -15,21 +19,87 @@ const MODULES = [
   { key: 'employment', label: '취업률', icon: '💼' },
 ] as const
 
+const TARGET = '호서대학교'
+
+/** 순위 변화를 방향으로 해석한다. **순위는 작아지는 것이 개선**이고, API 의
+ * `*RankDelta` 는 이미 "양수 = 개선" 으로 계산돼 온다(V09). 여기서 다시
+ * 뒤집지 않는다. */
+function rankDirection(delta: number | null | undefined): DeltaDirection {
+  if (delta === null || delta === undefined || delta === 0) return 'flat'
+  return delta > 0 ? 'up' : 'down'
+}
+
+function rankLabel(delta: number | null | undefined): string {
+  if (delta === null || delta === undefined) return '비교 없음'
+  if (delta === 0) return '변동 없음'
+  return `${delta > 0 ? '+' : ''}${delta}계단`
+}
+
 export default function App() {
-  const { choice, resolved, setTheme } = useTheme()
+  const { choice, setTheme } = useTheme()
+  const [dataset, setDataset] = useState<DatasetInfo | null>(null)
+  const [stats, setStats] = useState<StatsResponse | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      try {
+        const info = await api.dataset()
+        if (!alive) return
+        setDataset(info)
+
+        const latest = info.years[info.years.length - 1]
+        const s = await api.stats({ university: TARGET, year: latest })
+        if (!alive) return
+        setStats(s)
+      } catch (e) {
+        if (!alive) return
+        setError(e instanceof ApiError ? e.detail : String(e))
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
 
   const visible = MODULES.filter((m) => FEATURES[m.key])
+  const loading = !stats && !error
+
+  const year = stats?.year
+  const point = year ? stats.trend[String(year)] : undefined
+  const rank = year ? stats.rankChanges[String(year)] : undefined
+
+  const trendSeries = stats
+    ? [
+        {
+          name: stats.university,
+          emphasis: true,
+          points: byYear(stats.trend).map((r) => ({ year: r.year, value: r.perCapita })),
+        },
+        {
+          name: `${stats.regionName} 평균`,
+          points: byYear(stats.averages).map((r) => ({ year: r.year, value: r.regional ?? null })),
+        },
+        {
+          name: '전국 평균',
+          points: byYear(stats.averages).map((r) => ({ year: r.year, value: r.national ?? null })),
+        },
+      ]
+    : []
 
   return (
     <main className="mx-auto flex max-w-5xl flex-col gap-[var(--spacing-6)] p-[var(--spacing-6)]">
-      <header className="flex items-center justify-between gap-[var(--spacing-4)]">
+      <header className="flex flex-wrap items-center justify-between gap-[var(--spacing-4)]">
         <div>
           <h1 className="m-0 text-2xl font-bold text-[var(--text-primary)]">
             연구실적 분석 포털
           </h1>
-          <p className="mt-[var(--spacing-1)] text-sm text-[var(--text-secondary)]">
-            현재 테마: {resolved} ({choice})
-          </p>
+          {stats && (
+            <p className="mt-[var(--spacing-1)] text-sm text-[var(--text-secondary)]">
+              {stats.university} · {stats.regionName} · {stats.year}년
+            </p>
+          )}
         </div>
 
         <div className="flex gap-[var(--spacing-2)]" role="group" aria-label="테마 선택">
@@ -57,7 +127,7 @@ export default function App() {
       </header>
 
       <nav aria-label="분석 모듈">
-        <ul className="flex list-none gap-[var(--spacing-3)] p-0">
+        <ul className="flex list-none flex-wrap gap-[var(--spacing-3)] p-0">
           {visible.map((m) => (
             <li key={m.key}>
               <span
@@ -77,25 +147,97 @@ export default function App() {
         </ul>
       </nav>
 
+      {error && (
+        <div
+          role="alert"
+          data-testid="api-error"
+          className="
+            rounded-[var(--radius-md)] border border-[var(--color-down)]
+            bg-[var(--color-down-soft)] p-[var(--spacing-4)]
+            text-sm text-[var(--color-down)]
+          "
+        >
+          데이터를 불러오지 못했다: {error}
+        </div>
+      )}
+
       <section
-        aria-label="지표 미리보기"
-        className="grid grid-cols-[repeat(auto-fit,minmax(14rem,1fr))] gap-[var(--spacing-4)]"
+        aria-label="주요 지표"
+        className="grid grid-cols-[repeat(auto-fit,minmax(13rem,1fr))] gap-[var(--spacing-4)]"
       >
         <MetricCard
           label="전국순위"
-          value="71위"
-          caption="2026년 기준 · 등재 사립 133개교"
-          delta={{ label: '+6계단', direction: 'up', srLabel: '전국순위 6계단 상승' }}
+          value={point?.nationalRank != null ? `${point.nationalRank}위` : null}
+          caption={dataset ? `${year}년 · 등재 사립 ${dataset.universityCount}개교` : undefined}
+          loading={loading}
+          delta={
+            rank
+              ? {
+                  label: rankLabel(rank.nationalRankDelta),
+                  direction: rankDirection(rank.nationalRankDelta),
+                  srLabel: `전국순위 ${rankLabel(rank.nationalRankDelta)}`,
+                }
+              : undefined
+          }
+        />
+        <MetricCard
+          label="권역순위"
+          value={point?.regionalRank != null ? `${point.regionalRank}위` : null}
+          caption={stats ? `${stats.regionName}` : undefined}
+          loading={loading}
+          delta={
+            rank
+              ? {
+                  label: rankLabel(rank.regionalRankDelta),
+                  direction: rankDirection(rank.regionalRankDelta),
+                  srLabel: `권역순위 ${rankLabel(rank.regionalRankDelta)}`,
+                }
+              : undefined
+          }
         />
         <MetricCard
           label="1인당논문수"
-          value="0.1297편"
-          caption="2026년 기준"
-          delta={{ label: '+0.0115편', direction: 'up', srLabel: '1인당논문수 0.0115편 증가' }}
+          value={point ? `${point.perCapita.toFixed(4)}편` : null}
+          caption={`${year}년 기준`}
+          loading={loading}
         />
-        <MetricCard label="전임교원수" value="406명" caption="2026년 기준" />
-        <MetricCard label="권역순위" value={null} caption="데이터 없음" />
+        <MetricCard
+          label="전임교원수"
+          value={point ? `${point.faculty.toLocaleString('ko-KR')}명` : null}
+          caption={`${year}년 기준`}
+          loading={loading}
+        />
       </section>
+
+      <section aria-label="1인당 논문 수 추이">
+        <h2 className="mb-[var(--spacing-3)] text-lg font-semibold text-[var(--text-primary)]">
+          1인당 논문 수 추이
+        </h2>
+        <TrendChart
+          series={trendSeries}
+          valueLabel="1인당 논문 수(편)"
+          description={
+            stats
+              ? `${stats.university}, ${stats.regionName} 평균, 전국 평균의 1인당 논문 수 추이`
+              : '추이 차트'
+          }
+          precision={4}
+          loading={loading}
+        />
+      </section>
+
+      {dataset && (
+        <p className="text-xs text-[var(--text-muted)]">{dataset.nationalRankScopeNote}</p>
+      )}
+
+      {stats?.compareGroupNote && (
+        <p
+          data-testid="compare-note"
+          className="text-xs text-[var(--text-muted)]"
+        >
+          {stats.compareGroupNote}
+        </p>
+      )}
     </main>
   )
 }
