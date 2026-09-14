@@ -14,18 +14,37 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      - name: Setup Python 3.12
-        uses: actions/setup-python@v5
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v6
         with:
-          python-version: '3.12'
+          python-version: '3.11'
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # 설치본에는 web/dist 의 정적 파일만 들어간다. Node 런타임은 번들에
+      # 넣지 않는다 — 빌드는 여기서 하고 결과물만 복사한다.
+      - name: Build frontend
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
 
       - name: Create app icon
         run: python installer/windows/create_icon.py
 
       - name: Build Windows distribution
         run: python installer/windows/build_windows.py
+
+      # 파일 구성만 맞고 실제로는 안 뜨는 설치본을 걸러낸다.
+      - name: Verify built bundle
+        run: python scripts/verify_built_bundle.py
 
       - name: Install Inno Setup
         run: choco install innosetup -y
@@ -44,7 +63,22 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # 설치본에는 web/dist 의 정적 파일만 들어간다. Node 런타임은 번들에
+      # 넣지 않는다 — 빌드는 여기서 하고 결과물만 복사한다.
+      - name: Build frontend
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
 
       - name: Build macOS app bundle + DMG
         run: bash installer/macos/build_macos.sh
@@ -63,7 +97,7 @@ jobs:
       contents: write
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

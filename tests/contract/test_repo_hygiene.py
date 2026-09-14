@@ -123,7 +123,7 @@ def _toml_code_fences(markdown: str) -> list[str]:
 
 
 def _declared_python_versions() -> dict[str, str]:
-    """버전을 선언하는 3개 파일에서 major.minor 를 뽑는다."""
+    """Python 버전을 선언하는 모든 곳에서 major.minor 를 뽑는다."""
     declared: dict[str, str] = {}
 
     py_version = PROJECT_ROOT / ".python-version"
@@ -132,17 +132,15 @@ def _declared_python_versions() -> dict[str, str]:
         if match:
             declared[".python-version"] = f"{match.group(1)}.{match.group(2)}"
 
-    runtime = PROJECT_ROOT / "runtime.txt"
-    if runtime.exists():
-        match = _PY_VERSION_RE.search(_read(runtime))
-        if match:
-            declared["runtime.txt"] = f"{match.group(1)}.{match.group(2)}"
-
-    workflow = PROJECT_ROOT / ".github" / "workflows" / "build-installer.yml"
-    if workflow.exists():
+    # runtime.txt 는 Streamlit Cloud 전용이라 제거했다. 지금 버전을 선언하는
+    # 곳은 .python-version 과 워크플로 두 개다.
+    for name in ("build-installer.yml", "test.yml"):
+        workflow = PROJECT_ROOT / ".github" / "workflows" / name
+        if not workflow.exists():
+            continue
         found = re.findall(r"python-version:\s*['\"]?(\d+\.\d+)", _read(workflow))
         for index, value in enumerate(found):
-            key = "build-installer.yml" if index == 0 else f"build-installer.yml#{index}"
+            key = name if index == 0 else f"{name}#{index}"
             declared[key] = value
 
     return declared
@@ -294,9 +292,16 @@ def _case_docs_no_stale_paths() -> None:
 
 
 def _case_python_version_single() -> None:
-    """Python 버전 선언이 세 파일에서 한 값으로 모여 있어야 한다."""
+    """Python 버전 선언이 한 값으로 모여 있어야 한다.
+
+    선언이 갈리면 "로컬에선 되는데 CI 에선 안 되는" 문제가 난다. 어디서
+    선언하든 같은 값이어야 한다.
+    """
     declared = _declared_python_versions()
-    assert len(declared) >= 3, f"버전 선언 파일을 충분히 찾지 못했다: {declared}"
+    assert len(declared) >= 2, (
+        f"버전 선언을 충분히 찾지 못했다: {declared}. "
+        ".python-version 과 워크플로가 모두 있어야 한다."
+    )
     versions = set(declared.values())
     assert len(versions) == 1, (
         f"Python 버전 선언이 갈렸다 (major.minor {len(versions)}종): {declared}"
