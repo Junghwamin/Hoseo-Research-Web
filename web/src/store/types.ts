@@ -51,7 +51,32 @@ export interface WizardState {
   /** 분석 대상. `null` 이면 아직 고르지 않았다. */
   readonly university: string | null
   readonly year: number | null
-  /** 서버가 확정해 돌려준 권역. 클라이언트가 추측하지 않는다(V03). */
+
+  /**
+   * 사용자가 고른 권역. **입력**이다.
+   *
+   * 다캠퍼스 대학(경동대·단국대·상명대·예원예술대·을지대·홍익대)은 한 이름이
+   * 여러 권역에 걸쳐 있다. 고르지 않으면(`null`) 서버가 판정한다 — 그래도
+   * 결과는 아래 `regionName` 으로만 읽는다.
+   */
+  readonly regionChoice: string | null
+
+  /**
+   * 사용자가 고른 비교군. **입력**이다. `null` 이면 서버 기본 비교군.
+   *
+   * 빈 배열과 `null` 은 다르다 — 빈 배열은 "아무도 고르지 않았다" 는 선택이고
+   * `null` 은 "서버에 맡긴다" 다. 서버는 빈 배열을 받으면 기본값으로 되돌리므로
+   * 화면이 빈 배열을 보내지 않도록 막는다.
+   */
+  readonly compareGroup: readonly string[] | null
+
+  /**
+   * 서버가 확정해 돌려준 권역. **출력**이다.
+   *
+   * 클라이언트가 추측하지 않는다(V03) — '권역평균' 이 엉뚱한 모집단을
+   * 가리키는 원인이 그것이었다. `regionChoice` 와 이름이 비슷해 헷갈리기
+   * 쉬운데, 화면에 쓰는 값은 **언제나 이쪽**이다.
+   */
   readonly regionName: string | null
 
   /** 서버에서 받은 통계. 파생 상태의 뿌리다. */
@@ -75,8 +100,19 @@ export type WizardAction =
   | { readonly type: 'goto'; readonly step: Step }
   /** 다음 단계로. 도달 범위를 한 칸 넓힌다. */
   | { readonly type: 'next' }
-  /** 분석 대상 선택. 대상이 바뀌면 이전 통계는 의미가 없다. */
-  | { readonly type: 'selectTarget'; readonly university: string; readonly year: number }
+  /**
+   * 분석 대상 선택. 대상이 바뀌면 이전 통계는 의미가 없다.
+   *
+   * 권역·비교군까지 **한 액션에** 담는다. 나눠 두면 "대학은 바꿨는데 비교군은
+   * 이전 것" 같은 중간 상태가 생기고, 그게 V17 이 났던 모양이다.
+   */
+  | {
+      readonly type: 'selectTarget'
+      readonly university: string
+      readonly year: number
+      readonly regionChoice?: string | null
+      readonly compareGroup?: readonly string[] | null
+    }
   | { readonly type: 'loadStart' }
   | { readonly type: 'loadSuccess'; readonly stats: StatsResponse }
   | { readonly type: 'loadFailure'; readonly error: string }

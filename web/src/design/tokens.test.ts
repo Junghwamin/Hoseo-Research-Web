@@ -11,8 +11,9 @@ import { describe, it, expect } from 'vitest'
  */
 
 // Windows 에서 URL.pathname 은 '/C:/...' 를 돌려준다. fileURLToPath 를 써야 한다.
-const SRC = dirname(dirname(fileURLToPath(import.meta.url)))
-const TOKENS = join(SRC, 'styles', 'tokens.css')
+const DESIGN = dirname(fileURLToPath(import.meta.url))
+const SRC = dirname(DESIGN)
+const TOKENS = join(DESIGN, 'tokens.css')
 
 function walk(dir: string): string[] {
   const out: string[] = []
@@ -98,6 +99,45 @@ describe('디자인 토큰 — 테마 대칭성', () => {
     // 브랜드 팔레트(@theme)는 테마 무관이므로 :root 의 의미 토큰만 본다
     const missing = [...light].filter((v) => !dark.has(v))
     expect(missing, `다크에서 빠진 토큰: ${missing.join(', ')}`).toEqual([])
+  })
+
+  it('OS 다크(prefers-color-scheme) 블록이 명시 다크와 같은 토큰을 정의한다', () => {
+    // 다크 토큰 블록이 둘인 것은 CSS 의 제약이다 — 선택자 목록에 @media 를
+    // 넣을 수 없다. 둘이 어긋나면 **테마를 고르지 않은 시스템 다크 사용자만**
+    // 조용히 깨진다. 아무도 눈치채지 못하는 종류의 회귀라 테스트로 막는다.
+    const chosen = varsIn(":root[data-theme='dark']")
+    const system = varsIn(":root:not([data-theme='light'])")
+
+    const missing = [...chosen].filter((v) => !system.has(v))
+    const extra = [...system].filter((v) => !chosen.has(v))
+    expect(
+      { missing, extra },
+      'prefers-color-scheme 블록과 [data-theme=dark] 블록의 토큰이 어긋난다',
+    ).toEqual({ missing: [], extra: [] })
+  })
+
+  it('두 다크 블록의 토큰 값까지 같다', () => {
+    // 이름만 맞고 값이 다르면 더 찾기 어렵다 — 같은 화면이 경로에 따라
+    // 다른 색으로 보인다.
+    function valuesIn(blockStart: string): Map<string, string> {
+      const i = css.indexOf(blockStart)
+      const open = css.indexOf('{', i)
+      const body = css.slice(open, css.indexOf('}', open))
+      return new Map(
+        // 값에 줄바꿈이 들어갈 수 있다(여러 줄 gradient). 들여쓰기 차이는
+        // 드리프트가 아니므로 공백을 접어서 비교한다.
+        [...body.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map((m) => [
+          m[1],
+          m[2].replace(/\s+/g, ' ').trim(),
+        ]),
+      )
+    }
+    const chosen = valuesIn(":root[data-theme='dark']")
+    const system = valuesIn(":root:not([data-theme='light'])")
+    const differing = [...chosen].filter(([k, v]) => system.get(k) !== v)
+    expect(Object.fromEntries(differing.map(([k, v]) => [k, `${v} vs ${system.get(k)}`]))).toEqual(
+      {},
+    )
   })
 
   it('다크 테마에 순수 검정을 쓰지 않는다', () => {

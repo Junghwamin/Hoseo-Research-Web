@@ -22,6 +22,22 @@ export type RegionsResponse = S['RegionsResponse']
 export type NarrativeRequest = S['NarrativeRequest']
 export type NarrativeResponse = S['NarrativeResponse']
 export type ReportRequest = S['ReportRequest']
+export type UniversityRow = S['UniversityRow']
+export type UniversitiesResponse = S['UniversitiesResponse']
+export type SettingsResponse = S['SettingsResponse']
+export type ApiKeyRequest = S['ApiKeyRequest']
+
+/** 서버가 그려 주는 차트 5종. Word 보고서에 들어가는 것과 같은 그림이다. */
+export const CHART_KINDS = ['trend', 'bar', 'avg', 'rank', 'compare'] as const
+export type ChartKind = (typeof CHART_KINDS)[number]
+
+export const CHART_TITLES: Record<ChartKind, string> = {
+  trend: '연도별 1인당 논문 수 추이',
+  bar: '권역 내 전체 대학 비교',
+  avg: '평균 대비 위치',
+  rank: '순위 변화 추이',
+  compare: '비교군 대학 비교',
+}
 
 /** 서버가 보낸 오류. `detail` 에 사람이 읽을 이유가 들어 있다. */
 export class ApiError extends Error {
@@ -74,6 +90,26 @@ export const api = {
     request<RegionsResponse>(
       `/api/regions?university=${encodeURIComponent(university)}`,
     ),
+
+  /** 권역 안의 대학 전체. 비교군 후보 목록이 여기서 나온다. */
+  universities: (region: string, year: number) =>
+    request<UniversitiesResponse>(
+      `/api/universities?region=${encodeURIComponent(region)}&year=${year}`,
+    ),
+
+  settings: () => request<SettingsResponse>('/api/settings'),
+
+  /**
+   * API 키 저장.
+   *
+   * 키는 **올려보내기만** 한다. 응답에는 마스킹된 힌트만 들어 있다 —
+   * 서버가 키를 되돌려주면 개발자 도구에 그대로 남는다.
+   */
+  saveApiKey: (apiKey: string) =>
+    request<SettingsResponse>('/api/settings/api-key', {
+      method: 'POST',
+      body: JSON.stringify({ apiKey } satisfies ApiKeyRequest),
+    }),
 
   stats: (body: StatsRequest) =>
     request<StatsResponse>('/api/stats', {
@@ -142,4 +178,31 @@ export function byYear<T>(map: Record<string, T>): Array<{ year: number } & T> {
   return Object.entries(map)
     .map(([y, v]) => ({ year: Number(y), ...v }))
     .sort((a, b) => a.year - b.year)
+}
+
+/**
+ * 서버 차트 이미지 주소.
+ *
+ * `<img src>` 로 쓴다 — fetch 로 받아 objectURL 을 만들면 브라우저 캐시를
+ * 우회하게 되고, 단계를 오갈 때마다 matplotlib 이 다시 돈다.
+ *
+ * `compareGroup` 을 반드시 함께 보낸다. 빼면 서버가 기본 비교군으로 그리는데,
+ * 사용자가 고른 비교군으로 만들어지는 **Word 보고서와 그림이 달라진다.**
+ */
+export function chartUrl(
+  kind: ChartKind,
+  params: {
+    university: string
+    year: number
+    region?: string | null
+    compareGroup?: readonly string[] | null
+  },
+): string {
+  const q = new URLSearchParams({
+    university: params.university,
+    year: String(params.year),
+  })
+  if (params.region) q.set('region', params.region)
+  for (const name of params.compareGroup ?? []) q.append('compareGroup', name)
+  return `/api/chart/${kind}.png?${q.toString()}`
 }

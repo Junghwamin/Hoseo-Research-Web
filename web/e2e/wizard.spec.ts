@@ -3,21 +3,210 @@ import { test, expect, type Page } from '@playwright/test'
 /**
  * 5단계 마법사 관통 E2E.
  *
- * 여기서 잠그는 시나리오는 전부 원본 Streamlit 판에서 **실제로 났던 결함**이다.
- * 리듀서 단위 테스트가 이미 같은 계약을 잠그고 있지만, 단위 테스트는
- * "렌더까지 포함해 정말 그런가" 를 말해주지 못한다.
+ * 여기서 잠그는 시나리오는 전부 원본 Streamlit 판에서 **실제로 났던 결함**이거나,
+ * 이관하면서 **사라졌다가 되살린 기능**이다. 리듀서 단위 테스트가 이미 같은
+ * 계약을 잠그고 있지만, 단위 테스트는 "렌더까지 포함해 정말 그런가" 를
+ * 말해주지 못한다.
  */
 
+/**
+ * 콤보박스에서 대학을 고른다.
+ *
+ * 자유 텍스트 입력이 아니다 — 타이핑으로 좁히고 **목록에서 확정**해야 한다.
+ * 이게 바로 이관에서 잃었던 것이라, 테스트도 그 방식으로 조작해야 의미가 있다.
+ */
+async function pickUniversity(page: Page, name: string) {
+  const input = page.getByTestId('university-input')
+  await input.click()
+  await input.fill(name)
+  await page.getByRole('option', { name, exact: true }).click()
+  await expect(input).toHaveValue(name)
+}
+
 /** 1단계에서 데이터를 불러오고 2단계까지 간다. */
-async function loadAndAdvance(page: Page) {
+async function loadAndAdvance(page: Page, university = '호서대학교') {
   await page.goto('/')
+  await pickUniversity(page, university)
   await page.getByTestId('load-button').click()
-  await expect(page.getByTestId('load-summary')).toContainText('호서대학교')
+  await expect(page.getByTestId('load-summary')).toContainText(university)
   await page.getByTestId('next-button').click()
 }
 
+// ---------------------------------------------------------------------------
+// 되살린 기능
+// ---------------------------------------------------------------------------
+
+test('대학을 목록에서 고른다 — 없는 이름은 확정되지 않는다', async ({ page }) => {
+  await page.goto('/')
+  const input = page.getByTestId('university-input')
+
+  await input.click()
+  await input.fill('없는대학교')
+  // 원본 selectbox 는 없는 이름을 넣는 것이 **구조적으로 불가능**했다.
+  // 이관 후 자유 텍스트가 되면서 오타 한 번이 404 였다.
+  await expect(page.getByRole('status').first()).toContainText('일치하는 대학이 없다')
+  await expect(page.getByTestId('load-button')).toBeDisabled()
+
+  await input.fill('호서')
+  await expect(page.getByRole('option', { name: '호서대학교' })).toBeVisible()
+})
+
+test('전국 대학 전체가 목록에 있다', async ({ page }) => {
+  await page.goto('/')
+  const input = page.getByTestId('university-input')
+  await input.click()
+
+  // 개수만 주고 이름을 안 주면 화면은 자유 입력밖에 못 만든다
+  await expect(page.getByRole('status').first()).toContainText(/\d{3}개 중/)
+})
+
+test('비교군을 직접 고르면 분석에 반영된다', async ({ page }) => {
+  await page.goto('/')
+  await pickUniversity(page, '호서대학교')
+
+  // 후보 목록은 권역 전체다. /api/stats 의 compare 는 확정된 비교군만 담으므로
+  // 후보를 보여주려면 /api/universities 가 따로 필요하다.
+  const picker = page.getByLabel('비교군 후보 검색')
+  await expect(picker).toBeVisible()
+
+  const boxes = page.getByRole('checkbox')
+  await boxes.nth(0).check()
+  await boxes.nth(1).check()
+  await expect(page.getByTestId('compare-picker-summary')).toContainText('2개교 선택')
+
+  await page.getByTestId('load-button').click()
+  // 고른 2개교 + 대상 자신. 비교 차트에 자기 막대가 없으면 무엇과
+  // 비교하는지 알 수 없어서 서버가 대상을 늘 맨 앞에 넣는다.
+  await expect(page.getByTestId('load-summary')).toContainText('비교군 3개교')
+})
+
+test('1단계로 돌아와도 고른 비교군이 남아 있다', async ({ page }) => {
+  // 돌아올 때마다 선택이 지워지면, 화면은 "기본 비교군" 인데 서버에는 고른
+  // 비교군으로 분석된 결과가 남는다. 그 상태에서 다시 누르면 **말없이**
+  // 기본 비교군으로 바뀐다.
+  await page.goto('/')
+  await pickUniversity(page, '호서대학교')
+  await page.getByRole('checkbox').nth(0).check()
+  await page.getByRole('checkbox').nth(1).check()
+  await page.getByTestId('load-button').click()
+  await expect(page.getByTestId('load-summary')).toContainText('비교군 3개교')
+
+  await page.getByTestId('next-button').click()
+  await page.getByTestId('step-1').click()
+
+  await expect(page.getByTestId('compare-picker-summary')).toContainText('2개교 선택')
+  // 그대로 다시 눌러도 같은 비교군이어야 한다
+  await page.getByTestId('load-button').click()
+  await expect(page.getByTestId('load-summary')).toContainText('비교군 3개교')
+})
+
+test('비교군을 바꾸면 이전 분석이 남지 않는다', async ({ page }) => {
+  await page.goto('/')
+  await pickUniversity(page, '호서대학교')
+  await page.getByTestId('load-button').click()
+  await expect(page.getByTestId('load-summary')).toBeVisible()
+  await page.getByTestId('next-button').click() // 2단계까지 열린다
+
+  await page.getByTestId('step-1').click()
+
+  // 돌아오면 **실제로 쓰이고 있는** 비교군이 체크돼 있다. "기본 비교군" 이라고
+  // 써 놓고 서버는 구체적인 목록으로 분석한 상태를 만들지 않는다.
+  await expect(page.getByTestId('compare-picker-summary')).toContainText('개교 선택')
+
+  // 전부 지우고 하나만 고른다
+  await page.getByRole('button', { name: '기본 비교군으로' }).click()
+  await expect(page.getByTestId('compare-picker-summary')).toContainText('기본 비교군')
+  await page.getByRole('checkbox').first().check()
+  await page.getByTestId('load-button').click()
+
+  // **1개교만 골라도 바꿔치지 않는다.** 예전에는 서버의 "너무 적으면 채운다"
+  // 규칙이 요청받은 경우에도 돌아서, 화면은 "1개교 선택" 인데 보고서에는
+  // 권역 상위 5개교가 실렸다.
+  await expect(page.getByTestId('compare-picker-summary')).toContainText('1개교 선택')
+  await expect(page.getByTestId('load-summary')).toContainText('비교군 2개교')
+})
+
+test('2단계에 연도별 상세 표가 있다', async ({ page }) => {
+  await loadAndAdvance(page)
+
+  // 차트로는 0.5121 과 0.5118 을 구분할 수 없다. 보고서에 실릴 숫자를
+  // 확인하는 단계이므로 표가 카드보다 중요하다.
+  const table = page.getByTestId('year-table')
+  await expect(table).toBeVisible()
+  await expect(table.getByRole('columnheader', { name: '충청권 평균' })).toBeVisible()
+  await expect(table.getByRole('rowheader', { name: '2026년' })).toBeVisible()
+})
+
+test('3단계에 Word 에 실릴 차트 4종이 모두 뜬다', async ({ page }) => {
+  await loadAndAdvance(page)
+  await page.getByTestId('next-button').click() // 3
+
+  // 원본은 "5종 차트를 확인하세요, 보고서에 그대로 삽입됩니다" 였다.
+  // 이관 후에는 추이 하나만 남아 나머지는 문서를 열어야 볼 수 있었다.
+  for (const kind of ['bar', 'avg', 'rank', 'compare']) {
+    const figure = page.getByTestId(`chart-${kind}`)
+    await expect(figure).toBeVisible()
+    const img = figure.getByRole('img')
+    await expect(img).toBeVisible()
+    // 실제로 그려졌는지 — 깨진 이미지는 naturalWidth 가 0 이다
+    await expect
+      .poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth), {
+        timeout: 30_000,
+      })
+      .toBeGreaterThan(0)
+  }
+})
+
+test('4단계에 절 단위 생성 버튼과 진행 표시가 있다', async ({ page }) => {
+  await loadAndAdvance(page)
+  await page.getByTestId('next-button').click()
+  await page.getByTestId('next-button').click() // 4
+
+  // 하나만 마음에 안 들 때 넷을 다시 돌리면 돈과 시간이 네 배로 든다
+  for (const key of ['trend', 'comparison', 'regional', 'yoy']) {
+    await expect(page.getByTestId(`generate-${key}`)).toBeVisible()
+  }
+  await expect(page.getByTestId('narrative-progress')).toContainText('섹션 0/4')
+
+  await page.getByTestId('narrative-trend').fill('직접 쓴 글')
+  await expect(page.getByTestId('narrative-progress')).toContainText('섹션 1/4')
+})
+
+test('일괄 생성은 이미 쓴 글을 덮어쓰지 않는다', async ({ page }) => {
+  await loadAndAdvance(page)
+  await page.getByTestId('next-button').click()
+  await page.getByTestId('next-button').click() // 4
+
+  await page.getByTestId('narrative-trend').fill('손으로 고친 글')
+
+  // 버튼 라벨이 "비어 있는 N개 절 생성" 으로 바뀐다. 원본의 일괄 생성은
+  // 비어 있는 절만 채웠는데, 이관하면서 전부 덮어쓰게 되어 손으로 고친
+  // 글이 한 번의 클릭에 사라졌다.
+  await expect(page.getByTestId('generate-button')).toContainText('비어 있는 3개 절')
+
+  // 키가 없어 실패하더라도 내가 쓴 글은 그대로 남아야 한다
+  await page.getByTestId('generate-button').click()
+  await expect(page.getByTestId('narrative-error')).toBeVisible()
+  await expect(page.getByTestId('narrative-trend')).toHaveValue('손으로 고친 글')
+})
+
+test('설정에서 API 키 상태를 볼 수 있다', async ({ page }) => {
+  // Streamlit 판에서 설정은 **어디서도 도달할 수 없는 죽은 라우트**였다.
+  await page.goto('/')
+  await page.getByTestId('settings-toggle').click()
+
+  await expect(page.getByTestId('settings-status')).toBeVisible()
+  // 키 값 자체는 어떤 경우에도 화면에 오지 않는다
+  await expect(page.getByTestId('api-key-input')).toHaveAttribute('type', 'password')
+})
+
+// ---------------------------------------------------------------------------
+// 원본에서 났던 결함
+// ---------------------------------------------------------------------------
+
 test('1단계에서 데이터를 불러오면 서버가 권역을 확정해 돌려준다 (V03)', async ({ page }) => {
   await page.goto('/')
+  await pickUniversity(page, '호서대학교')
 
   // 권역을 입력하지 않았는데도 서버가 충청권으로 확정해야 한다.
   // Streamlit 은 여기서 None 을 흘려보내 '권역평균' 이 전국 평균이 됐다.
@@ -26,10 +215,12 @@ test('1단계에서 데이터를 불러오면 서버가 권역을 확정해 돌�
   await expect(page.getByTestId('load-summary')).toContainText('2026년')
 })
 
-test('불러오기 전에는 다음으로 갈 수 없다', async ({ page }) => {
+test('불러오기 전에는 다음으로 갈 수 없고, 왜인지 말해 준다', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByTestId('next-button')).toBeDisabled()
   await expect(page.getByTestId('step-2')).toBeDisabled()
+  // 회색으로 죽어 있기만 한 버튼이 사용자가 "불편하다" 고 한 것 중 하나였다
+  await expect(page.getByText('먼저 분석을 불러와야 한다')).toBeVisible()
 })
 
 test('진행하면 단계가 열리고, 뒤로 가도 닫히지 않는다 (V19)', async ({ page }) => {
@@ -93,6 +284,8 @@ test('처음부터 다시 누르면 모든 것이 초기화된다 (V04 · V05 ·
   // 불러온 데이터가 사라진다
   await expect(page.getByTestId('load-summary')).toHaveCount(0)
   await expect(page.getByTestId('next-button')).toBeDisabled()
+  // 고른 대학도 사라진다 — 리셋은 키를 골라 지우는 것이 아니다
+  await expect(page.getByTestId('university-input')).toHaveValue('')
 })
 
 test('리셋 후 다시 불러와도 크래시하지 않는다 (V05)', async ({ page }) => {
@@ -101,6 +294,7 @@ test('리셋 후 다시 불러와도 크래시하지 않는다 (V05)', async ({ 
 
   await loadAndAdvance(page)
   await page.getByTestId('reset-button').click()
+  await pickUniversity(page, '호서대학교')
   await page.getByTestId('load-button').click()
 
   await expect(page.getByTestId('load-summary')).toContainText('호서대학교')
@@ -115,6 +309,7 @@ test('리셋 후 서술이 남지 않는다 (V06 × V07 연쇄)', async ({ page 
   await page.getByTestId('narrative-trend').fill('이전 분석의 서술')
 
   await page.getByTestId('reset-button').click()
+  await pickUniversity(page, '호서대학교')
   await page.getByTestId('load-button').click()
   await page.getByTestId('next-button').click() // 2
   await page.getByTestId('next-button').click() // 3
@@ -132,7 +327,7 @@ test('대상을 바꾸면 이전 분석 결과가 남지 않는다 (V17)', async
   await page.getByTestId('narrative-trend').fill('호서대 서술')
 
   await page.getByTestId('step-1').click()
-  await page.getByTestId('university-input').fill('순천향대학교')
+  await pickUniversity(page, '순천향대학교')
   await page.getByTestId('load-button').click()
 
   await expect(page.getByTestId('load-summary')).toContainText('순천향대학교')
@@ -145,25 +340,15 @@ test('대상을 바꾸면 이전 분석 결과가 남지 않는다 (V17)', async
   await expect(page.getByTestId('narrative-trend')).toHaveValue('')
 })
 
-test('없는 대학을 부르면 이유를 알려주고 옛 데이터를 남기지 않는다', async ({ page }) => {
-  await loadAndAdvance(page)
-  await page.getByTestId('step-1').click()
-
-  await page.getByTestId('university-input').fill('없는대학교')
-  await page.getByTestId('load-button').click()
-
-  await expect(page.getByTestId('api-error')).toContainText('없는 대학')
-  // 실패했는데 옛 숫자가 남아 있으면 성공한 것처럼 보인다
-  await expect(page.getByTestId('load-summary')).toHaveCount(0)
-})
-
 test('3단계에서 차트·비교표·증감이 모두 실수치로 그려진다', async ({ page }) => {
   await loadAndAdvance(page)
   await page.getByTestId('next-button').click() // 3
 
-  await expect(page.getByRole('table', { name: /비교군/ })).toContainText('931명')
+  // 추이 차트의 sr-only 표에도 '비교군 평균' 이 있어 이름만으로는 갈린다.
+  await expect(
+    page.getByRole('table', { name: /비교군 \d+개교 연구실적/ }),
+  ).toContainText('931명')
   await expect(page.getByTestId('yoy-target')).toContainText('2025년 0.1182 → 2026년 0.1297')
-  await expect(page.getByRole('img', { name: /추이/ })).toBeVisible()
 })
 
 test('5단계가 서술 유무를 요약한다', async ({ page }) => {
@@ -209,7 +394,7 @@ test('GPT 키가 없으면 이유를 말한다 (V16)', async ({ page }) => {
 
   await page.getByTestId('generate-button').click()
 
-  const err = page.getByTestId('api-error')
+  const err = page.getByTestId('narrative-error')
   await expect(err).toBeVisible()
   await expect(err).toContainText('OPENAI_API_KEY')
   // 문서가 안내하던 중첩 테이블 형식이 원인이었으므로 그것도 짚어준다

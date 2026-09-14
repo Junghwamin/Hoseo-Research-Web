@@ -14,6 +14,8 @@ export const INITIAL_STATE: WizardState = {
   maxStep: 1,
   university: null,
   year: null,
+  regionChoice: null,
+  compareGroup: null,
   regionName: null,
   stats: null,
   narratives: emptyNarratives(),
@@ -74,10 +76,16 @@ export function reducer(state: WizardState, action: WizardAction): WizardState {
 
     case 'selectTarget': {
       // 대상이 바뀌면 이전 분석의 결과는 전부 의미가 없다(V17).
+      //
+      // 비교군도 여기 포함된다. 비교군이 바뀌면 평균·비교표·차트가 전부
+      // 달라지고, 그것들을 근거로 쓴 GPT 서술도 더는 맞지 않는다.
+      // "숫자만 갱신하고 글은 둔다" 는 절충은 **틀린 글을 남기는 쪽**이다.
       return {
         ...clearDerived(state),
         university: action.university,
         year: action.year,
+        regionChoice: action.regionChoice ?? null,
+        compareGroup: action.compareGroup ?? null,
       }
     }
 
@@ -93,6 +101,10 @@ export function reducer(state: WizardState, action: WizardAction): WizardState {
         // 권역은 서버가 확정해 돌려준 값을 그대로 쓴다. 클라이언트가 추측하면
         // '권역평균' 이 엉뚱한 모집단을 가리킨다(V03).
         regionName: action.stats.regionName,
+        // 비교군도 서버가 확정한 것으로 맞춘다. 사용자가 고르지 않았으면
+        // 기본 비교군이 들어오는데, 이걸 반영하지 않으면 **차트 요청만
+        // 비교군 없이 나가** 화면과 보고서의 그림이 갈라진다.
+        compareGroup: action.stats.compareGroup,
       }
 
     case 'loadFailure':

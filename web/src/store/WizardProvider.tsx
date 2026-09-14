@@ -11,6 +11,16 @@ import { api, ApiError } from '../api/client'
 import { INITIAL_STATE, reducer } from './reducer'
 import type { NarrativeKey, Step, WizardState } from './types'
 
+/** 한 번의 분석을 결정하는 입력 전부. */
+export interface AnalysisInput {
+  readonly university: string
+  readonly year: number
+  /** 다캠퍼스 대학에서 고른 권역. `null` 이면 서버가 판정한다. */
+  readonly regionChoice?: string | null
+  /** 고른 비교군. `null` 이면 서버 기본 비교군. */
+  readonly compareGroup?: readonly string[] | null
+}
+
 interface WizardApi {
   readonly state: WizardState
   readonly goto: (step: Step) => void
@@ -18,7 +28,7 @@ interface WizardApi {
   readonly reset: () => void
   readonly setNarrative: (key: NarrativeKey, text: string) => void
   /** 대상을 고르고 서버에서 통계를 받아온다. 실패는 상태의 error 로 들어간다. */
-  readonly loadTarget: (university: string, year: number) => Promise<void>
+  readonly loadTarget: (input: AnalysisInput) => Promise<void>
 }
 
 const WizardContext = createContext<WizardApi | null>(null)
@@ -26,13 +36,22 @@ const WizardContext = createContext<WizardApi | null>(null)
 export function WizardProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE)
 
-  const loadTarget = useCallback(async (university: string, year: number) => {
+  const loadTarget = useCallback(async (input: AnalysisInput) => {
+    const { university, year, regionChoice = null, compareGroup = null } = input
+
     // selectTarget 이 먼저 파생 상태를 지운다. 순서를 바꾸면 요청이 실패했을 때
     // 이전 분석 결과가 그대로 남아 새 대상의 것처럼 보인다(V17).
-    dispatch({ type: 'selectTarget', university, year })
+    dispatch({ type: 'selectTarget', university, year, regionChoice, compareGroup })
     dispatch({ type: 'loadStart' })
     try {
-      const stats = await api.stats({ university, year })
+      const stats = await api.stats({
+        university,
+        year,
+        regionName: regionChoice,
+        // 빈 배열을 보내면 서버가 기본 비교군으로 되돌린다. "아무도 안 고름" 을
+        // 표현할 방법이 없으므로, 비었으면 아예 보내지 않는다.
+        compareGroup: compareGroup && compareGroup.length > 0 ? [...compareGroup] : null,
+      })
       dispatch({ type: 'loadSuccess', stats })
     } catch (e) {
       dispatch({

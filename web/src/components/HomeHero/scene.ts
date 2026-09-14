@@ -1,10 +1,8 @@
 import {
-  AmbientLight,
   Color,
-  DirectionalLight,
   IcosahedronGeometry,
   Mesh,
-  MeshStandardMaterial,
+  MeshBasicMaterial,
   PerspectiveCamera,
   Scene,
   WebGLRenderer,
@@ -60,32 +58,32 @@ export function createScene(canvas: HTMLCanvasElement): SceneHandle {
   const camera = new PerspectiveCamera(45, 1, 0.1, 100)
   camera.position.set(0, 0, 6)
 
-  const accentToken = readToken('--accent')
-  if (!accentToken) {
+  // 히어로는 사진 위다. 밝은 색을 쓴다 — `--accent` 는 흰 지면용 딥그린이라
+  // 어두운 사진 위에서 초록 얼룩으로만 보인다.
+  const figureToken = readToken('--color-brand-200')
+  if (!figureToken) {
     // 색을 모르면 그리지 않는다. 호출부가 정적 대체물로 넘어간다.
     renderer.dispose()
-    throw new Error('--accent 토큰을 읽지 못했다')
+    throw new Error('--color-brand-200 토큰을 읽지 못했다')
   }
-  const accent = new Color(accentToken)
 
   const mesh = new Mesh(
     // detail=1 이면 면이 320개다. 장식에 충분하고 저사양에서도 가볍다.
     new IcosahedronGeometry(2, 1),
-    new MeshStandardMaterial({
-      color: accent,
-      roughness: 0.35,
-      metalness: 0.1,
-      flatShading: true,
+    // **와이어프레임이다.** 채워진 면은 사진 위에서 덩어리로 뭉쳐 보여
+    // 의도한 장식이 아니라 렌더 오류처럼 읽힌다. 선으로 두면 사진이 비치고
+    // 그래픽으로 읽힌다.
+    new MeshBasicMaterial({
+      color: new Color(figureToken),
+      wireframe: true,
       transparent: true,
-      opacity: 0.9,
+      opacity: 0.55,
     }),
   )
   scene.add(mesh)
 
-  scene.add(new AmbientLight(0xffffff, 1.1))
-  const key = new DirectionalLight(0xffffff, 1.6)
-  key.position.set(3, 4, 5)
-  scene.add(key)
+  // 조명을 두지 않는다. MeshBasicMaterial 은 빛을 받지 않으므로 계산만 늘고
+  // 화면은 그대로다.
 
   function resize() {
     const parent = canvas.parentElement
@@ -129,7 +127,7 @@ export function createScene(canvas: HTMLCanvasElement): SceneHandle {
   function dispose() {
     pause()
     mesh.geometry.dispose()
-    ;(mesh.material as MeshStandardMaterial).dispose()
+    ;(mesh.material as MeshBasicMaterial).dispose()
     // 컨텍스트를 명시적으로 잃어야 GPU 자원이 즉시 반납된다. 브라우저는
     // 동시 WebGL 컨텍스트 수에 상한이 있어서, 흘리면 다음 캔버스가 못 뜬다.
     renderer.dispose()

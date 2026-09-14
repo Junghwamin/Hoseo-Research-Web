@@ -222,3 +222,93 @@ describe('로딩과 오류', () => {
     expect(s.loading).toBe(false)
   })
 })
+
+/**
+ * 권역·비교군은 **입력**이고 `regionName` 은 **출력**이다.
+ *
+ * 둘을 섞으면 V03 이 다시 난다 — 클라이언트가 권역을 추측하면 '권역평균' 이
+ * 엉뚱한 모집단을 가리킨다. 여기서 방향을 못박는다.
+ */
+describe('권역·비교군 입력', () => {
+  it('선택한 권역과 비교군을 그대로 들고 있는다', () => {
+    const s = reducer(INITIAL_STATE, {
+      type: 'selectTarget',
+      university: '홍익대학교',
+      year: 2026,
+      regionChoice: '충청권',
+      compareGroup: ['순천향대학교', '단국대학교'],
+    })
+    expect(s.regionChoice).toBe('충청권')
+    expect(s.compareGroup).toEqual(['순천향대학교', '단국대학교'])
+  })
+
+  it('고르지 않으면 null 이다 — 빈 배열이 아니다', () => {
+    // 빈 배열은 "아무도 안 고름" 이라는 **선택**이고, null 은 "서버에 맡김" 이다.
+    // 서버는 빈 배열을 기본 비교군으로 되돌리므로 둘을 섞으면 화면과
+    // 보고서가 서로 다른 비교군을 쓰게 된다.
+    const s = reducer(INITIAL_STATE, {
+      type: 'selectTarget',
+      university: '호서대학교',
+      year: 2026,
+    })
+    expect(s.regionChoice).toBeNull()
+    expect(s.compareGroup).toBeNull()
+  })
+
+  it('서버가 확정한 비교군으로 갱신된다', () => {
+    let s = reducer(INITIAL_STATE, {
+      type: 'selectTarget',
+      university: '호서대학교',
+      year: 2026,
+    })
+    s = reducer(s, { type: 'loadSuccess', stats: stats('호서대학교', 2026) })
+    // 차트 요청이 이 값을 쓴다. 비어 있으면 서버가 기본 비교군으로 그리는데,
+    // 보고서는 확정된 비교군으로 만들어져 **그림이 갈라진다.**
+    expect(s.compareGroup).toEqual(['호서대학교'])
+  })
+
+  it('권역은 서버가 돌려준 값으로 읽는다 — 고른 값이 아니다', () => {
+    let s = reducer(INITIAL_STATE, {
+      type: 'selectTarget',
+      university: '홍익대학교',
+      year: 2026,
+      regionChoice: '수도권',
+    })
+    s = reducer(s, { type: 'loadSuccess', stats: stats('홍익대학교', 2026) })
+    expect(s.regionChoice).toBe('수도권')
+    expect(s.regionName).toBe('충청권') // 서버가 확정한 값
+  })
+
+  it('비교군만 바꿔도 이전 분석 결과와 서술을 버린다', () => {
+    const before = loadedAtStep4()
+    expect(before.narratives.trend).not.toBe('')
+
+    const after = reducer(before, {
+      type: 'selectTarget',
+      university: before.university!,
+      year: before.year!,
+      compareGroup: ['순천향대학교'],
+    })
+
+    // 비교군이 바뀌면 평균·비교표·차트가 전부 달라진다. 그걸 근거로 쓴
+    // 서술을 남겨 두면 **틀린 글이 그대로 보고서에 실린다.**
+    expect(after.stats).toBeNull()
+    expect(after.narratives.trend).toBe('')
+    expect(after.step).toBe(1)
+    expect(after.maxStep).toBe(1)
+  })
+
+  it('리셋하면 권역·비교군 선택도 사라진다', () => {
+    let s = reducer(INITIAL_STATE, {
+      type: 'selectTarget',
+      university: '단국대학교',
+      year: 2026,
+      regionChoice: '충청권',
+      compareGroup: ['호서대학교'],
+    })
+    s = reducer(s, { type: 'reset' })
+    expect(s.regionChoice).toBeNull()
+    expect(s.compareGroup).toBeNull()
+  })
+})
+

@@ -5,6 +5,16 @@ import { decideHeroMode, readEnvironment, type HeroMode } from './capability'
 export interface HomeHeroProps {
   readonly title: string
   readonly subtitle: string
+  /** 제목 위 작은 라벨. */
+  readonly eyebrow?: string
+  /**
+   * 배경 사진. **번들된 파일만 쓴다**(`scripts/fetch_media.py` 가 받아 둔다).
+   *
+   * 설치본은 오프라인이라 CDN 주소를 쓰면 히어로가 통째로 빈다.
+   */
+  readonly imageSrc?: string
+  /** 사진 아래에 깔 대체 색. 사진을 못 받으면 이것만 보인다. */
+  readonly children?: React.ReactNode
 }
 
 /**
@@ -20,7 +30,13 @@ export interface HomeHeroProps {
  * 3. **의심스러우면 포기한다.** reduced-motion·저사양·좁은 화면·WebGL 부재는
  *    전부 정적 대체물로 간다(capability.ts).
  */
-export function HomeHero({ title, subtitle }: HomeHeroProps) {
+export function HomeHero({
+  title,
+  subtitle,
+  eyebrow,
+  imageSrc,
+  children,
+}: HomeHeroProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [mode, setMode] = useState<HeroMode>('static')
 
@@ -82,37 +98,69 @@ export function HomeHero({ title, subtitle }: HomeHeroProps) {
   return (
     <section
       aria-label="소개"
-      className="
-        relative overflow-hidden
-        rounded-[var(--radius-xl)] border border-[var(--border-subtle)]
-        bg-[var(--surface-raised)]
-        px-[var(--spacing-6)] py-[var(--spacing-7)]
-      "
+      // 사진 위에 흰 글자를 얹는다. 테마와 무관하게 이 구간만 항상 어둡다 —
+      // 사진이 배경이면 다크/라이트로 글자색을 바꿀 수가 없다.
+      className="relative overflow-hidden bg-[var(--surface-inverse)]"
     >
-      {/* 장식 레이어. 보조 기술에서는 감춘다 — 읽어봐야 의미가 없다. */}
+      {imageSrc && (
+        <img
+          src={imageSrc}
+          // 장식이다. 이 사진이 전하는 정보는 없다 — alt 를 채우면
+          // 스크린리더 사용자에게 의미 없는 문장을 읽힌다.
+          alt=""
+          aria-hidden="true"
+          // 히어로는 첫 화면이다. 지연 로딩하면 흰 화면이 먼저 보인다.
+          fetchPriority="high"
+          className="absolute inset-0 h-full w-full object-cover opacity-45"
+        />
+      )}
+
+      {/* 글 읽히는 대비를 사진에 맡기지 않는다. 사진이 밝은 쪽이 걸리면
+          흰 글자가 사라진다. */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 bg-[image:var(--scrim-hero)]"
+      />
+
+      {/* 움직이는 장식. 보조 기술에서는 감춘다 — 읽어봐야 의미가 없다.
+          오른쪽에만 둔다. 글 뒤에 깔면 대비가 떨어져 읽기 나빠진다. */}
       {mode === 'three' ? (
         <canvas
           ref={canvasRef}
           data-testid="hero-canvas"
           aria-hidden="true"
-          className="absolute inset-0 h-full w-full opacity-60"
+          className="
+            pointer-events-none absolute inset-y-0 right-0 hidden h-full w-1/2
+            opacity-90 lg:block
+          "
         />
       ) : (
         <div
           data-testid="hero-static"
           aria-hidden="true"
-          className="
-            absolute inset-0
-            bg-[radial-gradient(60%_80%_at_80%_20%,var(--accent-soft),transparent_70%)]
-          "
+          className="pointer-events-none absolute inset-0 bg-[image:var(--scrim-hero-glow)]"
         />
       )}
 
-      <div className="relative flex flex-col gap-[var(--spacing-3)]">
-        <h1 className="m-0 text-3xl font-bold text-[var(--text-primary)]">{title}</h1>
-        <p className="m-0 max-w-[36rem] text-sm text-[var(--text-secondary)]">
-          {subtitle}
-        </p>
+      <div
+        className="
+          relative mx-auto flex max-w-[var(--container-content)] flex-col
+          gap-[var(--spacing-5)]
+          px-[var(--spacing-5)] py-[var(--spacing-9)]
+        "
+      >
+        {eyebrow && (
+          <span className="text-eyebrow font-semibold uppercase text-[var(--color-brand-200)]">
+            {eyebrow}
+          </span>
+        )}
+        {/* 표제는 크게. 지금까지 화면에서 가장 큰 글자가 18px 이라 무엇이
+            표제인지 알 수 없었다. */}
+        <h1 className="m-0 max-w-[20ch] text-display font-bold text-[var(--color-ink-0)]">
+          {title}
+        </h1>
+        <p className="m-0 max-w-[48ch] text-lead text-[var(--color-ink-200)]">{subtitle}</p>
+        {children && <div className="flex flex-wrap gap-[var(--spacing-3)]">{children}</div>}
       </div>
     </section>
   )

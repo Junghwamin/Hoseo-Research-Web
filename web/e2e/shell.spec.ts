@@ -12,7 +12,10 @@ test('앱이 예외 없이 뜬다', async ({ page }) => {
 
   await page.goto('/')
 
-  await expect(page.getByRole('heading', { name: '연구실적 분석 포털' })).toBeVisible()
+  // 제품 이름은 상단바에, 히어로 표제는 h1 에 있다. 둘이 나뉜 이유는
+  // 상단바가 스크롤해도 따라붙는 고정 지점이라서다.
+  await expect(page.getByRole('banner')).toContainText('연구실적 분석 포털')
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
   await expect(page.getByTestId('api-error')).toHaveCount(0)
   expect(errors, `콘솔 예외: ${errors.join(' / ')}`).toEqual([])
 })
@@ -54,8 +57,10 @@ test('히어로가 3D 를 못 그려도 글은 읽을 수 있다', async ({ page
   await page.goto('/')
 
   // 장식이 실패해도 제목과 설명은 남아야 한다.
-  await expect(page.getByRole('heading', { name: '연구실적 분석 포털' })).toBeVisible()
-  await expect(page.getByText(/대학알리미 전임교원 연구실적을/)).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: '연구실적을 권역 기준으로 읽는다' }),
+  ).toBeVisible()
+  await expect(page.getByText(/전임교원 SCI\/SCOPUS 논문 실적을/)).toBeVisible()
 })
 
 test('모션을 줄이겠다고 하면 3D 를 그리지 않는다', async ({ page }) => {
