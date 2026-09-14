@@ -28,6 +28,11 @@ const PYTHON_BIN = process.env.PYTHON_BIN ?? VENV_PYTHON
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
+
+  // 워커를 제한한다. 보고서 생성 테스트는 서버의 차트 락(_CHART_LOCK)에
+  // 직렬화되고 한 건에 수 초가 걸린다. 워커를 CPU 수만큼 띄우면 뒤에 선
+  // 테스트가 30초 타임아웃에 걸려 '진짜 실패' 와 구분되지 않는다.
+  workers: process.env.CI ? 2 : 4,
   // 로컬에서 .only 를 남긴 채 커밋하면 CI 가 조용히 일부만 돌게 된다
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

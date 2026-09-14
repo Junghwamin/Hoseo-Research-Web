@@ -1,3 +1,4 @@
+import { HomeHero } from './components/HomeHero/HomeHero'
 import { FEATURES } from './features'
 import { Wizard } from './routes/Wizard'
 import { WizardProvider } from './store/WizardProvider'
@@ -23,9 +24,7 @@ export default function App() {
   return (
     <main className="mx-auto flex max-w-5xl flex-col gap-[var(--spacing-6)] p-[var(--spacing-6)]">
       <header className="flex flex-wrap items-center justify-between gap-[var(--spacing-4)]">
-        <h1 className="m-0 text-2xl font-bold text-[var(--text-primary)]">
-          연구실적 분석 포털
-        </h1>
+        <span className="sr-only">연구실적 분석 포털</span>
 
         <div className="flex gap-[var(--spacing-2)]" role="group" aria-label="테마 선택">
           {(['light', 'dark', 'system'] as const).map((t) => (
@@ -50,6 +49,11 @@ export default function App() {
           ))}
         </div>
       </header>
+
+      <HomeHero
+        title="연구실적 분석 포털"
+        subtitle="대학알리미 전임교원 연구실적을 권역·비교군 기준으로 분석하고 Word 보고서를 만든다."
+      />
 
       <nav aria-label="분석 모듈">
         <ul className="flex list-none flex-wrap gap-[var(--spacing-3)] p-0">
