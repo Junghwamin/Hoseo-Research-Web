@@ -1,7 +1,7 @@
 import type { Preview, Decorator } from '@storybook/react-vite'
 import { useEffect } from 'react'
 
-import '../src/styles/tokens.css'
+import '../src/design/tokens.css'
 
 /**
  * 루프 4단계(시각 확인)는 **라이트/다크 × 모바일/데스크톱 4조합**을 본다.
