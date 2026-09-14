@@ -147,6 +147,88 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "NarrativeRequest": {
+        "properties": {
+          "compareGroup": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comparegroup"
+          },
+          "keys": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keys"
+          },
+          "regionName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regionname"
+          },
+          "university": {
+            "title": "University",
+            "type": "string"
+          },
+          "year": {
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "university",
+          "year"
+        ],
+        "title": "NarrativeRequest",
+        "type": "object"
+      },
+      "NarrativeResponse": {
+        "description": "생성된 서술.\n\n키가 4종 전부 오지 않을 수 있다 — 일부만 요청했거나, 일부만 실패했을 때다.\n`failed` 에 실패한 키와 이유를 담는다. 조용히 빈 문자열을 돌려주면\n사용자는 GPT 가 \"아무 말도 하지 않았다\" 고 오해한다.",
+        "properties": {
+          "failed": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Failed",
+            "type": "object"
+          },
+          "narratives": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Narratives",
+            "type": "object"
+          }
+        },
+        "required": [
+          "narratives",
+          "failed"
+        ],
+        "title": "NarrativeResponse",
+        "type": "object"
+      },
       "RankChange": {
         "description": "순위와 그 변화.\n\n**부호 규약: 양수 = 개선.** 순위는 작아지는 것이 개선이므로\n`이전순위 - 현재순위` 다. V09 가 이 규약을 화면에서 한 번 더 뒤집어\n개선을 하락으로 표시했던 결함이다. 여기서 못박고 프론트는 그대로 쓴다.",
         "properties": {
@@ -224,6 +306,56 @@
           "regions"
         ],
         "title": "RegionsResponse",
+        "type": "object"
+      },
+      "ReportRequest": {
+        "properties": {
+          "compareGroup": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comparegroup"
+          },
+          "narratives": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Narratives",
+            "type": "object"
+          },
+          "regionName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regionname"
+          },
+          "university": {
+            "title": "University",
+            "type": "string"
+          },
+          "year": {
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "university",
+          "year"
+        ],
+        "title": "ReportRequest",
         "type": "object"
       },
       "StatsRequest": {
@@ -559,6 +691,47 @@
         "summary": "Health"
       }
     },
+    "/api/narrative": {
+      "post": {
+        "operationId": "post_narrative_api_narrative_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NarrativeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NarrativeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Narrative",
+        "tags": [
+          "report"
+        ]
+      }
+    },
     "/api/regions": {
       "get": {
         "operationId": "get_regions_api_regions_get",
@@ -598,6 +771,45 @@
         "summary": "Get Regions",
         "tags": [
           "stats"
+        ]
+      }
+    },
+    "/api/report": {
+      "post": {
+        "operationId": "post_report_api_report_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Report",
+        "tags": [
+          "report"
         ]
       }
     },

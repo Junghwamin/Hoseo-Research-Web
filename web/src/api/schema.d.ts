@@ -38,6 +38,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/narrative": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Narrative */
+        post: operations["post_narrative_api_narrative_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/regions": {
         parameters: {
             query?: never;
@@ -49,6 +66,23 @@ export interface paths {
         get: operations["get_regions_api_regions_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Report */
+        post: operations["post_report_api_report_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -142,6 +176,37 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** NarrativeRequest */
+        NarrativeRequest: {
+            /** Comparegroup */
+            compareGroup?: string[] | null;
+            /** Keys */
+            keys?: string[] | null;
+            /** Regionname */
+            regionName?: string | null;
+            /** University */
+            university: string;
+            /** Year */
+            year: number;
+        };
+        /**
+         * NarrativeResponse
+         * @description 생성된 서술.
+         *
+         *     키가 4종 전부 오지 않을 수 있다 — 일부만 요청했거나, 일부만 실패했을 때다.
+         *     `failed` 에 실패한 키와 이유를 담는다. 조용히 빈 문자열을 돌려주면
+         *     사용자는 GPT 가 "아무 말도 하지 않았다" 고 오해한다.
+         */
+        NarrativeResponse: {
+            /** Failed */
+            failed: {
+                [key: string]: string;
+            };
+            /** Narratives */
+            narratives: {
+                [key: string]: string;
+            };
+        };
         /**
          * RankChange
          * @description 순위와 그 변화.
@@ -169,6 +234,21 @@ export interface components {
             regions: string[];
             /** University */
             university: string;
+        };
+        /** ReportRequest */
+        ReportRequest: {
+            /** Comparegroup */
+            compareGroup?: string[] | null;
+            /** Narratives */
+            narratives?: {
+                [key: string]: string;
+            };
+            /** Regionname */
+            regionName?: string | null;
+            /** University */
+            university: string;
+            /** Year */
+            year: number;
         };
         /** StatsRequest */
         StatsRequest: {
@@ -311,6 +391,39 @@ export interface operations {
             };
         };
     };
+    post_narrative_api_narrative_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NarrativeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NarrativeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_regions_api_regions_get: {
         parameters: {
             query: {
@@ -329,6 +442,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RegionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_report_api_report_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

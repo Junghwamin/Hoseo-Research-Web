@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # ---------------------------------------------------------------------------
@@ -174,3 +174,44 @@ class RegionsResponse(BaseModel):
 
     university: str
     regions: list[str]
+
+
+# ---------------------------------------------------------------------------
+# 서술 · 보고서
+# ---------------------------------------------------------------------------
+
+#: GPT 서술 4종의 키. `core.report_builder` 가 이 이름으로 읽는다.
+NARRATIVE_KEYS = ("trend", "comparison", "regional", "yoy")
+
+#: 차트 5종의 키. `core.report_builder` 가 이 이름으로 읽는다.
+CHART_KEYS = ("trend", "bar", "avg", "rank", "compare")
+
+
+class NarrativeRequest(BaseModel):
+    university: str
+    year: int
+    regionName: str | None = None
+    compareGroup: list[str] | None = None
+    #: 생성할 서술. 생략하면 4종 전부.
+    keys: list[str] | None = None
+
+
+class NarrativeResponse(BaseModel):
+    """생성된 서술.
+
+    키가 4종 전부 오지 않을 수 있다 — 일부만 요청했거나, 일부만 실패했을 때다.
+    `failed` 에 실패한 키와 이유를 담는다. 조용히 빈 문자열을 돌려주면
+    사용자는 GPT 가 "아무 말도 하지 않았다" 고 오해한다.
+    """
+
+    narratives: dict[str, str]
+    failed: dict[str, str]
+
+
+class ReportRequest(BaseModel):
+    university: str
+    year: int
+    regionName: str | None = None
+    compareGroup: list[str] | None = None
+    #: 화면에서 편집한 서술. 비어 있으면 그 절은 제목만 들어간다.
+    narratives: dict[str, str] = Field(default_factory=dict)

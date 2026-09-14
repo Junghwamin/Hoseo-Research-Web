@@ -178,3 +178,54 @@ test('5단계가 서술 유무를 요약한다', async ({ page }) => {
   await expect(summary).toContainText('자')
   await expect(summary).toContainText('비어 있음') // 나머지 3개
 })
+
+test('5단계에서 Word 보고서를 실제로 내려받는다', async ({ page }) => {
+  await loadAndAdvance(page)
+  await page.getByTestId('next-button').click()
+  await page.getByTestId('next-button').click() // 4
+  await page.getByTestId('narrative-trend').fill('E2E 가 넣은 추이 서술')
+  await page.getByTestId('next-button').click() // 5
+
+  const download = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByTestId('download-button').click(),
+  ]).then(([d]) => d)
+
+  // 파일명은 서버가 RFC 5987 로 보낸 것을 그대로 쓴다
+  expect(download.suggestedFilename()).toContain('호서대학교')
+  expect(download.suggestedFilename()).toContain('2026')
+  expect(download.suggestedFilename()).toMatch(/\.docx$/)
+
+  const path = await download.path()
+  expect(path, '다운로드 파일이 없다').toBeTruthy()
+})
+
+test('GPT 키가 없으면 이유를 말한다 (V16)', async ({ page }) => {
+  // 서버에 키가 없는 상태로 CI/로컬이 돈다. 사이드바에 "⚠ 미설정" 만 뜨고
+  // 원인을 안 알려주던 것이 V16 이었다.
+  await loadAndAdvance(page)
+  await page.getByTestId('next-button').click()
+  await page.getByTestId('next-button').click() // 4
+
+  await page.getByTestId('generate-button').click()
+
+  const err = page.getByTestId('api-error')
+  await expect(err).toBeVisible()
+  await expect(err).toContainText('OPENAI_API_KEY')
+  // 문서가 안내하던 중첩 테이블 형식이 원인이었으므로 그것도 짚어준다
+  await expect(err).toContainText('평면 키')
+})
+
+test('서술이 비어도 보고서가 나온다', async ({ page }) => {
+  await loadAndAdvance(page)
+  await page.getByTestId('next-button').click()
+  await page.getByTestId('next-button').click()
+  await page.getByTestId('next-button').click() // 5
+
+  const download = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByTestId('download-button').click(),
+  ]).then(([d]) => d)
+
+  expect(await download.path()).toBeTruthy()
+})

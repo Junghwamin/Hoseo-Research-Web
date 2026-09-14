@@ -30,6 +30,13 @@ from io import BytesIO
 from pathlib import Path
 
 import matplotlib
+
+# 이 모듈은 BytesIO PNG 만 만들고 창을 띄우지 않는다. GUI 백엔드로 돌면
+# 요청 스레드에서 Tk 를 건드려 "main thread is not in main loop" 로 터지고,
+# 최악에는 Tcl_AsyncDelete 로 프로세스가 죽는다. pyplot 을 import 하기 **전**에
+# 백엔드를 못박아야 한다 — import 후에는 use() 가 늦다.
+matplotlib.use("Agg", force=True)
+
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import pandas as pd

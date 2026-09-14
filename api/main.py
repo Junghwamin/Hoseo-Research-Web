@@ -16,7 +16,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from api.routers import stats
+from api.routers import report, stats
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 WEB_DIST = PROJECT_ROOT / "web" / "dist"
@@ -28,6 +28,7 @@ app = FastAPI(
 )
 
 app.include_router(stats.router)
+app.include_router(report.router)
 
 
 @app.get("/api/health")

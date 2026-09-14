@@ -19,6 +19,9 @@ export type CompareRow = S['CompareRow']
 export type YoYEntry = S['YoYEntry']
 export type YoYChanges = S['YoYChanges']
 export type RegionsResponse = S['RegionsResponse']
+export type NarrativeRequest = S['NarrativeRequest']
+export type NarrativeResponse = S['NarrativeResponse']
+export type ReportRequest = S['ReportRequest']
 
 /** 서버가 보낸 오류. `detail` 에 사람이 읽을 이유가 들어 있다. */
 export class ApiError extends Error {
@@ -77,6 +80,56 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  narrative: (body: NarrativeRequest) =>
+    request<NarrativeResponse>('/api/narrative', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * Word 보고서를 받는다. JSON 이 아니라 바이트라 `request` 를 쓰지 않는다.
+   *
+   * 파일명은 서버가 Content-Disposition 에 RFC 5987 로 넣어 보낸다 —
+   * 한글 파일명을 클라이언트가 지어내면 서버가 정한 규칙과 갈라진다.
+   */
+  report: async (body: ReportRequest): Promise<{ blob: Blob; filename: string }> => {
+    const res = await fetch('/api/report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+
+    if (!res.ok) {
+      let detail = `${res.status} ${res.statusText}`
+      try {
+        const err = await res.json()
+        if (typeof err?.detail === 'string') detail = err.detail
+      } catch {
+        /* 본문이 JSON 이 아니면 상태줄을 쓴다 */
+      }
+      throw new ApiError(res.status, detail)
+    }
+
+    return {
+      blob: await res.blob(),
+      filename: parseFilename(res.headers.get('content-disposition')),
+    }
+  },
+}
+
+/** `filename*=UTF-8''...` 에서 이름을 꺼낸다. 없으면 무난한 기본값. */
+export function parseFilename(disposition: string | null): string {
+  const fallback = 'report.docx'
+  if (!disposition) return fallback
+  const match = /filename\*=UTF-8''([^;]+)/i.exec(disposition)
+  if (!match) return fallback
+  try {
+    return decodeURIComponent(match[1])
+  } catch {
+    // 서버가 잘못 인코딩했어도 다운로드 자체는 되게 한다
+    return fallback
+  }
 }
 
 /**

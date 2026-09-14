@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import { byYear, type DatasetInfo } from '../api/client'
-import { api } from '../api/client'
+import { api, ApiError, byYear, type DatasetInfo } from '../api/client'
 import { CompareTable } from '../components/CompareTable/CompareTable'
 import { MetricCard } from '../components/MetricCard/MetricCard'
 import type { DeltaDirection } from '../components/MetricCard/types'
@@ -34,6 +33,10 @@ export function Wizard() {
   const { state, goto, next, reset, setNarrative, loadTarget } = useWizard()
   const [dataset, setDataset] = useState<DatasetInfo | null>(null)
   const [datasetError, setDatasetError] = useState<string | null>(null)
+  /** 진행 중인 장시간 작업. 두 개가 동시에 돌지 않게 한 값으로 관리한다. */
+  const [busy, setBusy] = useState<'narrative' | 'report' | null>(null)
+  const [failed, setFailed] = useState<Record<string, string>>({})
+  const [actionError, setActionError] = useState<string | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -47,6 +50,57 @@ export function Wizard() {
   }, [])
 
   const { stats, step, maxStep, loading, error, narratives } = state
+
+  async function generateAll() {
+    if (!stats) return
+    setBusy('narrative')
+    setActionError(null)
+    try {
+      const res = await api.narrative({
+        university: stats.university,
+        year: stats.year,
+        regionName: stats.regionName,
+        compareGroup: stats.compareGroup,
+      })
+      for (const [key, text] of Object.entries(res.narratives)) {
+        setNarrative(key as NarrativeKey, text)
+      }
+      setFailed(res.failed)
+    } catch (e) {
+      setActionError(e instanceof ApiError ? e.detail : String(e))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function downloadReport() {
+    if (!stats) return
+    setBusy('report')
+    setActionError(null)
+    try {
+      const { blob, filename } = await api.report({
+        university: stats.university,
+        year: stats.year,
+        regionName: stats.regionName,
+        compareGroup: stats.compareGroup,
+        narratives,
+      })
+      // 브라우저 다운로드는 임시 <a> 를 만들어 클릭하는 것이 유일한 방법이다.
+      // objectURL 을 해제하지 않으면 blob 이 탭이 닫힐 때까지 메모리에 남는다.
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setActionError(e instanceof ApiError ? e.detail : String(e))
+    } finally {
+      setBusy(null)
+    }
+  }
   const year = stats?.year
   const point = year ? stats?.trend[String(year)] : undefined
   const rank = year ? stats?.rankChanges[String(year)] : undefined
@@ -77,7 +131,7 @@ export function Wizard() {
         {step}단계: {STEPS[step - 1]}
       </h2>
 
-      {(error || datasetError) && (
+      {(error || datasetError || actionError) && (
         <p
           role="alert"
           data-testid="api-error"
@@ -87,7 +141,8 @@ export function Wizard() {
             text-sm text-[var(--color-down)]
           "
         >
-          데이터를 불러오지 못했다: {error ?? datasetError}
+          {actionError ? '작업에 실패했다' : '데이터를 불러오지 못했다'}:{' '}
+          {error ?? datasetError ?? actionError}
         </p>
       )}
 
@@ -210,6 +265,46 @@ export function Wizard() {
             서술은 단계를 오가도 사라지지 않는다. 원본 Streamlit 판에서는 4단계를
             벗어나면 입력이 지워졌다.
           </p>
+
+          <div className="flex flex-wrap items-center gap-[var(--spacing-3)]">
+            <button
+              type="button"
+              data-testid="generate-button"
+              disabled={!stats || busy !== null}
+              onClick={generateAll}
+              className="
+                rounded-[var(--radius-md)] border border-[var(--accent)]
+                bg-[var(--accent)] px-[var(--spacing-4)] py-[var(--spacing-2)]
+                text-sm font-medium text-[var(--text-on-brand)]
+                disabled:cursor-not-allowed disabled:opacity-50
+              "
+            >
+              {busy === 'narrative' ? '생성 중…' : 'GPT 서술 일괄 생성'}
+            </button>
+            <span className="text-xs text-[var(--text-muted)]">
+              API 키는 서버에만 있다. 생성된 글은 직접 고쳐도 된다.
+            </span>
+          </div>
+
+          {/* 일부만 실패해도 나머지는 채워진다. 실패를 조용히 빈 칸으로 두면
+              GPT 가 "아무 말도 하지 않았다" 고 오해한다. */}
+          {Object.keys(failed).length > 0 && (
+            <ul
+              role="alert"
+              data-testid="narrative-failed"
+              className="
+                m-0 list-none rounded-[var(--radius-md)]
+                border border-[var(--color-down)] bg-[var(--color-down-soft)]
+                p-[var(--spacing-3)] text-xs text-[var(--color-down)]
+              "
+            >
+              {Object.entries(failed).map(([key, reason]) => (
+                <li key={key}>
+                  {NARRATIVE_LABELS[key as NarrativeKey] ?? key}: {reason}
+                </li>
+              ))}
+            </ul>
+          )}
           {NARRATIVE_KEYS.map((key) => (
             <label key={key} className="flex flex-col gap-[var(--spacing-2)]">
               <span className="text-sm font-medium text-[var(--text-secondary)]">
@@ -248,6 +343,21 @@ export function Wizard() {
               </li>
             ))}
           </ul>
+
+          <button
+            type="button"
+            data-testid="download-button"
+            disabled={!stats || busy !== null}
+            onClick={downloadReport}
+            className="
+              w-fit rounded-[var(--radius-md)] border border-[var(--accent)]
+              bg-[var(--accent)] px-[var(--spacing-5)] py-[var(--spacing-3)]
+              text-sm font-medium text-[var(--text-on-brand)]
+              disabled:cursor-not-allowed disabled:opacity-50
+            "
+          >
+            {busy === 'report' ? 'Word 만드는 중…' : 'Word 보고서 내려받기'}
+          </button>
         </section>
       )}
 
