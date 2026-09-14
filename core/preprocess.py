@@ -742,8 +742,9 @@ def process_in_memory(
         - export_csv(), export_excel() 호출 없음 (파일 쓰기 불필요)
         - 매핑 실패 대학은 경고 출력 후 결과에서 제외 (기존 merge_campuses 동작)
     """
-    # config 디렉토리는 스크립트 위치 기준으로 결정 (읽기 전용, 기존 main()과 동일)
-    config_dir = Path(__file__).parent / "config"
+    # config 디렉토리는 스크립트 위치 기준으로 결정 (읽기 전용, 기존 main()과 동일).
+    # 이 파일은 core/ 안에 있고 config/ 는 프로젝트 루트에 있으므로 한 단계 위로 올라간다.
+    config_dir = Path(__file__).resolve().parent.parent / "config"
 
     # --- Step 1: 설정 파일 로드 ---
     universities, name_mapping, regions = load_config(config_dir)
@@ -848,8 +849,8 @@ def process_in_memory(
 # 12. 메인 함수
 # ---------------------------------------------------------------------------
 def main():
-    script_dir = Path(__file__).parent
-    config_dir = script_dir / "config"    # config JSON은 코드와 함께 번들에 포함 (read-only OK)
+    project_root = Path(__file__).resolve().parent.parent   # core/ 의 부모 = 프로젝트 루트
+    config_dir = project_root / "config"  # config JSON은 코드와 함께 번들에 포함 (read-only OK)
     raw_dir = Path.cwd() / "Raw data"     # CWD 기준 (쓰기 가능)
     output_dir = Path.cwd() / "output"    # CWD 기준 (쓰기 가능)
 

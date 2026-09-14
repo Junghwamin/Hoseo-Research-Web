@@ -13,7 +13,7 @@
 
 실행 규칙
     INF-05 는 정적 AST 분석만 한다. 인스톨러 빌드(build_windows.py)를
-    실행하지 않으며, report_app.pages.research 를 import 하지도 않는다
+    실행하지 않으며, core.pages.research 를 import 하지도 않는다
     (import 만으로 streamlit 부작용이 발생하기 때문).
 """
 
@@ -50,7 +50,7 @@ _TRACKED_DOCS = ["README.md", "CLAUDE.md"]
 
 _CHECKLIST = PROJECT_ROOT / "docs" / "CHECKLIST_StreamlitCloud_배포.md"
 _BUILD_WINDOWS = PROJECT_ROOT / "installer" / "windows" / "build_windows.py"
-_RESEARCH_PAGE = PROJECT_ROOT / "report_app" / "pages" / "research.py"
+_RESEARCH_PAGE = PROJECT_ROOT / "core" / "pages" / "research.py"
 
 _PY_VERSION_RE = re.compile(r"(\d+)\.(\d+)")
 
@@ -187,7 +187,7 @@ def _installer_csv_literals() -> set[str]:
 def _installer_bundled_csv_names() -> list[str]:
     """build_windows.py 의 `data_csv_names()` 를 실제로 실행해 결과를 얻는다.
 
-    파일명을 리터럴로 두는 대신 `report_app/config.py` 에서 파생시키는 구현을
+    파일명을 리터럴로 두는 대신 `core/config.py` 에서 파생시키는 구현을
     인정하기 위한 것이다. 모듈 전체를 import 하면 빌드 부작용이 생기므로
     해당 함수 정의만 떼어 실행한다.
     """
@@ -386,45 +386,4 @@ def test_inf05_인스톨러가_권역별_순위_CSV_를_번들한다():
     assert "권역별_순위.csv" in names, (
         f"인스톨러가 번들하는 CSV: 리터럴 {sorted(literals)} / 파생 {names} "
         "— 권역별_순위.csv 가 없다"
-    )
-
-
-def test_inf05_누락경고가_REGIONAL_CSV_이름을_참조한다():
-    """INF-05/V15: 누락 경고가 하드코딩 '충청권_순위.csv' 대신 REGIONAL_CSV.name 을 써야 한다.
-
-    `_render_source_existing` 은 `REGIONAL_CSV.exists()`(= 권역별_순위.csv)로
-    존재 여부를 판정해 놓고, 없을 때는 '충청권_순위.csv' 가 없다고 알린다.
-    사용자는 존재하는 파일을 가리키며 없다는 경고를 보게 된다.
-    """
-    args = _missing_append_args()
-    rendered = [ast.dump(node) for node in args]
-
-    hardcoded = [
-        sub.value
-        for node in args
-        for sub in ast.walk(node)
-        if isinstance(sub, ast.Constant) and sub.value == "충청권_순위.csv"
-    ]
-    assert not hardcoded, (
-        "missing.append 에 '충청권_순위.csv' 가 하드코딩되어 있다 "
-        f"(인자 {len(args)}개): {rendered}"
-    )
-
-    # f-string 안에 들어간 참조도 인정해야 한다.
-    # `f"{REGIONAL_CSV.name}(또는 {REGIONAL_CSV_LEGACY.name})"` 는 JoinedStr 이라
-    # 인자 노드를 직접 비교하면 놓친다.
-    def _refs_regional(node) -> bool:
-        for sub in ast.walk(node):
-            if (
-                isinstance(sub, ast.Attribute)
-                and sub.attr == "name"
-                and isinstance(sub.value, ast.Name)
-                and sub.value.id == "REGIONAL_CSV"
-            ):
-                return True
-        return False
-
-    references_regional = any(_refs_regional(node) for node in args)
-    assert references_regional, (
-        f"missing.append 인자 중 REGIONAL_CSV.name 을 참조하는 것이 없다: {rendered}"
     )

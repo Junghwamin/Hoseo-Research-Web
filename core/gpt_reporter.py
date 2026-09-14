@@ -25,7 +25,7 @@ import json
 
 from openai import OpenAI
 
-from report_app.config import GPT_MAX_TOKENS, GPT_MODEL, GPT_TEMPERATURE, UNIVERSITY
+from core.config import GPT_MAX_TOKENS, GPT_MODEL, GPT_TEMPERATURE, UNIVERSITY
 
 # ---------------------------------------------------------------------------
 # 시스템 프롬프트

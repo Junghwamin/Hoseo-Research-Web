@@ -40,10 +40,10 @@ import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal
 
-import report_app.chart_generator as cg
-import report_app.data_loader as dl
-import report_app.gpt_reporter as gr
-import report_app.report_builder as rb
+import core.chart_generator as cg
+import core.data_loader as dl
+import core.gpt_reporter as gr
+import core.report_builder as rb
 from tests.conftest import RAW_DIR, REALDATA_AVAILABLE, SANDBOX
 from tests.fixtures.fake_openai import make_fake_client
 from tests.fixtures.make_frames import simple_pair

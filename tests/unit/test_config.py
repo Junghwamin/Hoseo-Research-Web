@@ -1,4 +1,4 @@
-"""report_app/config.py 설정 계약 테스트 (INF-03).
+"""core/config.py 설정 계약 테스트 (INF-03).
 
 config.py 는 import 시점에 `Path.cwd()` 를 단 한 번 평가해 모든 경로 상수를
 고정한다(config.py:80). 그래서 conftest 가 수집(collection) 전에 chdir 를 끝내야
@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-import report_app.config as config
+import core.config as config
 from tests.conftest import PROJECT_ROOT, SANDBOX
 
 _CLOUD_ENV_KEYS = ("IS_CLOUD", "STREAMLIT_SHARING_MODE")
@@ -195,19 +195,23 @@ def test_inf03_region_map_contract():
 
 
 @pytest.mark.characterization
-def test_inf03_region_map_is_dead_duplicate_inside_report_app():
-    """INF-03(특성화, D02): config.REGION_MAP 이 report_app 어디에서도 참조되지 않는 죽은 중복이다."""
-    app_dir = PROJECT_ROOT / "report_app"
+def test_inf03_region_map_is_dead_duplicate_inside_core():
+    """INF-03(특성화, D02): config.REGION_MAP 은 아무도 참조하지 않는 죽은 중복이다.
+
+    전처리는 자기 사본(core/preprocess.py)으로 권역 매핑을 수행한다. 두 사본이
+    이제 같은 `core/` 안에 나란히 있으므로 중복이 눈에 보인다 — 값이 같다는
+    사실은 아래 테스트가 따로 고정한다.
+    """
+    core_dir = PROJECT_ROOT / "core"
     hits = sorted(
         path.relative_to(PROJECT_ROOT).as_posix()
-        for path in app_dir.rglob("*.py")
+        for path in core_dir.rglob("*.py")
         if "REGION_MAP" in path.read_text(encoding="utf-8")
     )
 
-    assert hits == ["report_app/config.py"], (
-        "REGION_MAP 이 정의부(config.py) 말고 다른 곳에서도 등장한다. "
-        f"실제 등장 파일: {hits}. 실제 권역 매핑은 전처리 스크립트가 자기 사본으로 수행한다"
-        " (전임교원_연구실적_전처리.py:38, :414)."
+    assert hits == ["core/config.py", "core/preprocess.py"], (
+        "REGION_MAP 등장 파일 집합이 바뀌었다. "
+        f"실제: {hits}. 정의부(config.py)는 죽은 사본이고 실제 매핑은 preprocess.py 가 한다."
     )
 
 

@@ -182,17 +182,15 @@ def test_etl_u04_2017_sci_must_cover_both_genders(pp_module, tmp_path):
 
 @pytest.mark.realdata
 @pytest.mark.skipif(_RAW_2017 is None, reason="Raw data/2017년*.xlsx 없음")
-def test_etl_u04_realdata_2017_hoseo_sci_total(pp_module):
+def test_etl_u04_realdata_2017_hoseo_sci_total(pp_module, project_root):
     """ETL-U04(realdata): 실제 2017 Raw 의 호서대 SCI/SCOPUS 논문수가 77.3614 여야 한다.
 
     read_excel → filter_universities → merge_campuses → calculate_metrics 경로.
     현행은 남성분(61.4167)만 집계되어 1인당논문수까지 과소 산출된다.
     """
-    from pathlib import Path
-
-    universities, name_mapping, _regions = pp_module.load_config(
-        Path(pp_module.__file__).parent / "config"
-    )
+    # config/ 는 프로젝트 루트에 있다. 전처리 모듈 위치(core/)를 기준으로 삼으면
+    # 모듈이 옮겨질 때마다 깨지므로 project_root 픽스처를 쓴다.
+    universities, name_mapping, _regions = pp_module.load_config(project_root / "config")
 
     df = pp_module.read_excel(_RAW_2017)
     df = pp_module.filter_universities(df)

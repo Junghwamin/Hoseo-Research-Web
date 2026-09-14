@@ -57,7 +57,7 @@ try:
         print("─" * 50, file=sys.stderr)
         print("✅ 체크리스트:", file=sys.stderr)
         print("   □ CLAUDE.md 작업 로그 최신 상태인지 확인", file=sys.stderr)
-        print("   □ 앱 실행 테스트: streamlit run report_app/app.py", file=sys.stderr)
+        print("   □ 앱 실행 테스트: streamlit run core/app.py", file=sys.stderr)
         print("─" * 50 + "\n", file=sys.stderr)
 
 except Exception as e:

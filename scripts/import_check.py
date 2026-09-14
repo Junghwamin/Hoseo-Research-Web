@@ -28,11 +28,11 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 # 임포트 검사 대상 모듈 (파일명 → 모듈 경로)
 MODULE_MAP = {
-    "config.py":          "report_app.config",
-    "data_loader.py":     "report_app.data_loader",
-    "chart_generator.py": "report_app.chart_generator",
-    "gpt_reporter.py":    "report_app.gpt_reporter",
-    "report_builder.py":  "report_app.report_builder",
+    "config.py":          "core.config",
+    "data_loader.py":     "core.data_loader",
+    "chart_generator.py": "core.chart_generator",
+    "gpt_reporter.py":    "core.gpt_reporter",
+    "report_builder.py":  "core.report_builder",
     "app.py":             None,  # app.py는 streamlit 전용 → ast 구문 검사만
 }
 

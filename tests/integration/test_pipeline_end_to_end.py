@@ -16,11 +16,11 @@ import pandas as pd
 import pytest
 from docx import Document
 
-import report_app.chart_generator as cg
-import report_app.data_loader as dl
-import report_app.gpt_reporter as gr
-from report_app.config import REPORT_TITLE
-from report_app.report_builder import build_report
+import core.chart_generator as cg
+import core.data_loader as dl
+import core.gpt_reporter as gr
+from core.config import REPORT_TITLE
+from core.report_builder import build_report
 from tests.conftest import REALDATA_AVAILABLE
 from tests.fixtures.fake_openai import make_fake_client
 

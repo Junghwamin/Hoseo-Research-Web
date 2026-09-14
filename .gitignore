@@ -44,3 +44,11 @@ desktop.ini
 
 # pytest
 .pytest_cache/
+
+# 가상환경 (React 전환 저장소)
+.venv/
+
+# Node / React
+node_modules/
+web/dist/
+web/.vite/

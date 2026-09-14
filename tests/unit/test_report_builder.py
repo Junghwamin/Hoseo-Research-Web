@@ -1,6 +1,6 @@
 """report_builder 단위 테스트 (DOC-U01 ~ DOC-U09).
 
-대상: report_app/report_builder.py
+대상: core/report_builder.py
 
 build_report 는 디스크를 전혀 건드리지 않고 메모리 내 docx(BytesIO)를 반환한다.
 따라서 모든 검증은 반환된 바이트를 python-docx 로 다시 열어(re-open) 수행한다.
@@ -21,7 +21,7 @@ import pytest
 from docx.image.exceptions import UnrecognizedImageError
 from docx.oxml.ns import qn
 
-import report_app.report_builder as rb
+import core.report_builder as rb
 from tests.fixtures.tiny_png import fake_charts, small_png_buf
 
 ZIP_MAGIC = b"PK\x03\x04"

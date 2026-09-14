@@ -29,7 +29,7 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
 
-from report_app.config import (
+from core.config import (
     COMPARE_GROUP_NAME,
     REPORT_FONT,
     REPORT_TITLE,

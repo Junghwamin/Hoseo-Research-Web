@@ -46,13 +46,13 @@ sys.path.insert(0, PROJECT_ROOT_PLACEHOLDER)
 
 try:
     # 1. 모듈 로드
-    from report_app.config import NATIONAL_CSV, REGIONAL_CSV, UNIVERSITY, COMPARE_GROUP
-    from report_app.data_loader import (
+    from core.config import NATIONAL_CSV, REGIONAL_CSV, UNIVERSITY, COMPARE_GROUP
+    from core.data_loader import (
         load_all_data, get_hoseo_trend, get_averages,
         get_rank_changes, get_yoy_changes, get_compare_group_data,
         get_available_years
     )
-    from report_app.chart_generator import create_trend_chart
+    from core.chart_generator import create_trend_chart
 
     # 2. CSV 로드
     if not NATIONAL_CSV.exists() or not REGIONAL_CSV.exists():

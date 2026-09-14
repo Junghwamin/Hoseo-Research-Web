@@ -1,8 +1,8 @@
 """QA 테스트 하네스 공통 설정 (conftest).
 
 중요: 이 파일의 모듈 레벨 코드는 pytest 수집(collection) 단계에서
-테스트 모듈이 report_app 을 import 하기 전에 실행되어야 한다.
-report_app.config 는 import 시점에 Path.cwd() 를 1회 평가하므로
+테스트 모듈이 core 를 import 하기 전에 실행되어야 한다.
+core.config 는 import 시점에 Path.cwd() 를 1회 평가하므로
 (config.py:80 `_PROJECT_ROOT = Path.cwd()`), chdir 이 늦으면
 NATIONAL_CSV 등 경로 상수가 실제 프로젝트 루트로 고정된다.
 세션 픽스처(session fixture)는 수집보다 늦게 실행되므로 쓸 수 없다.
@@ -83,7 +83,7 @@ for _name in _CSV_NAMES:
 RAW_DIR = PROJECT_ROOT / "Raw data"
 RAW_AVAILABLE = RAW_DIR.exists() and len(list(RAW_DIR.glob("*.xlsx"))) > 0
 
-PREPROCESS_PATH = PROJECT_ROOT / "전임교원_연구실적_전처리.py"
+PREPROCESS_PATH = PROJECT_ROOT / "core" / "preprocess.py"
 
 # 4. import 경로에 프로젝트 루트 추가 후 cwd 를 샌드박스로 이동
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -92,9 +92,9 @@ os.chdir(SANDBOX)
 # 5. 경로 상수 바인딩을 이 시점에 확정시킨다(순서 의존을 없애기 위해 명시 import).
 #    chart_generator 를 미리 import 해 폰트 캐시 생성 비용을
 #    AppTest run 타임아웃 바깥으로 빼는 효과도 있다.
-import report_app.config as _cfg  # noqa: E402
-import report_app.data_loader as _dl  # noqa: E402
-import report_app.chart_generator as _cg  # noqa: E402
+import core.config as _cfg  # noqa: E402
+import core.data_loader as _dl  # noqa: E402
+import core.chart_generator as _cg  # noqa: E402
 
 import matplotlib  # noqa: E402
 import matplotlib.pyplot as _plt  # noqa: E402
@@ -146,16 +146,6 @@ def pp_module():
     return mod
 
 
-@pytest.fixture(scope="session")
-def app_script() -> Path:
-    """AppTest.from_file 에 넘길 절대경로.
-
-    상대경로를 쓰면 샌드박스 cwd 기준으로 해석돼 FileNotFoundError 가 난다
-    (streamlit/testing/v1/app_test.py:304-314).
-    """
-    return PROJECT_ROOT / "report_app" / "app.py"
-
-
 # ===========================================================================
 # 격리 픽스처 (autouse)
 # ===========================================================================
@@ -179,33 +169,6 @@ def _isolate_env_and_dotenv():
 
 
 @pytest.fixture(autouse=True)
-def _reset_streamlit_pages_manager():
-    """AppTest 파일 간 오염을 막는다.
-
-    `PagesManager.uses_pages_directory` 는 **클래스 전역**이고, 최초
-    PagesManager 생성 시 `<main_script_parent>/pages` 존재 여부로 한 번만
-    결정된 뒤 리셋되지 않는다(pages_manager.py:35, :58-61).
-
-    `report_app/app.py` 옆에는 `report_app/pages/` 가 있으므로
-    `AppTest.from_file(app.py)` 를 한 번이라도 돌리면 이 플래그가 True 로 굳는다.
-    그 뒤의 모든 `AppTest.from_function` 은 script_runner.py:668 에서
-    `_mpa_v1()` 경로로 빠지는데, from_function 이 만드는 임시 파일 이름은
-    확장자 없는 md5 해시라 `page_icon_and_name()` 이 ''를 돌려주고
-    "The title of the page cannot be empty" 예외로 전부 실패한다.
-
-    단독 실행에서는 통과하고 전체 실행에서만 깨지므로, 반드시 격리해야 한다.
-    """
-    from streamlit.runtime.pages_manager import PagesManager
-
-    saved = PagesManager.uses_pages_directory
-    PagesManager.uses_pages_directory = None
-    try:
-        yield
-    finally:
-        PagesManager.uses_pages_directory = saved if saved is None else None
-
-
-@pytest.fixture(autouse=True)
 def _matplotlib_cleanup():
     """Figure 누수가 다음 테스트로 번지지 않게 한다.
 
@@ -216,19 +179,3 @@ def _matplotlib_cleanup():
     _plt.close("all")
     matplotlib.rcParams.update(_RCPARAMS_SNAPSHOT)
 
-
-@pytest.fixture
-def bare_session_state():
-    """ScriptRunContext 없는 비렌더 모드(bare mode) session_state.
-
-    streamlit 은 전역 _mock_session_state 를 지연 생성 후 영구 보관하므로
-    (session_state_proxy.py:52-64) 테스트 간 상태가 누수된다.
-    """
-    import streamlit as st
-    from streamlit.runtime.state import session_state_proxy as _proxy
-
-    _proxy._mock_session_state = None
-    try:
-        yield st.session_state
-    finally:
-        _proxy._mock_session_state = None

@@ -1,6 +1,6 @@
 """chart_generator 단위 테스트 (VIS-U01 ~ VIS-U07).
 
-대상: report_app/chart_generator.py
+대상: core/chart_generator.py
 
 이 모듈은 순수 입출력(pure I/O) 함수 5종으로 구성된다. 입력은 dict/DataFrame/list,
 출력은 PNG 를 담은 BytesIO 다. 따라서 픽셀 비교(pixel diff) 없이도
@@ -26,7 +26,7 @@ import matplotlib.pyplot as plt
 import pytest
 from PIL import Image
 
-import report_app.chart_generator as cg
+import core.chart_generator as cg
 from tests.fixtures.make_frames import make_reg
 
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"

@@ -28,7 +28,7 @@ import math
 
 import pandas as pd
 
-from report_app.config import (
+from core.config import (
     COMPARE_GROUP,
     NATIONAL_CSV,
     REGIONAL_CSV,

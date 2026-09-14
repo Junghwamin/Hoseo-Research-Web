@@ -20,34 +20,33 @@ class TestSandboxBinding:
 
     def test_config_project_root_is_sandbox(self):
         """config.py:80 의 Path.cwd() 가 샌드박스로 평가됐어야 한다."""
-        import report_app.config as cfg
+        import core.config as cfg
 
         assert cfg._PROJECT_ROOT == SANDBOX, (
-            "report_app.config 가 샌드박스 chdir 이전에 import 됐다. "
+            "core.config 가 샌드박스 chdir 이전에 import 됐다. "
             "conftest.py 모듈 레벨 순서를 확인하라."
         )
 
     def test_bound_csv_paths_point_into_sandbox(self):
         """값으로 바인딩된 경로 상수 3곳이 모두 샌드박스를 가리켜야 한다."""
-        import report_app.config as cfg
-        import report_app.data_loader as dl
-        import report_app.pages.research as research
+        # UI 층이 사라지면서 값 바인딩 지점이 3곳에서 2곳(config, data_loader)으로 줄었다.
+        # 이 가드가 무너지면 테스트가 실제 output/ 을 덮어쓴다.
+        import core.config as cfg
+        import core.data_loader as dl
 
         expected = SANDBOX / "output"
         assert cfg.NATIONAL_CSV.parent == expected
         assert dl.NATIONAL_CSV.parent == expected
         assert dl.REGIONAL_CSV.parent == expected
         assert dl.REGIONAL_CSV_LEGACY.parent == expected
-        assert research.NATIONAL_CSV.parent == expected
-        assert research.REGIONAL_CSV.parent == expected
-        assert research.REPORT_DIR == expected / "reports"
+        assert cfg.REPORT_DIR == expected / "reports"
 
     def test_cwd_is_sandbox(self):
         assert Path.cwd() == SANDBOX
 
     def test_project_root_is_repo(self):
-        assert (PROJECT_ROOT / "report_app" / "app.py").exists()
-        assert (PROJECT_ROOT / "전임교원_연구실적_전처리.py").exists()
+        assert (PROJECT_ROOT / "core" / "config.py").exists()
+        assert (PROJECT_ROOT / "core" / "preprocess.py").exists()
 
 
 class TestEnvIsolation:
@@ -81,7 +80,7 @@ class TestMatplotlibHarness:
         """폰트 캐시 생성 비용이 AppTest run 밖에서 끝났는지 확인."""
         import sys
 
-        assert "report_app.chart_generator" in sys.modules
+        assert "core.chart_generator" in sys.modules
 
     def test_no_leaked_figures_at_start(self):
         import matplotlib.pyplot as plt

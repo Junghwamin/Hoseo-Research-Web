@@ -34,7 +34,7 @@ STDLIB_AND_IGNORE = {
     "subprocess", "contextlib", "importlib", "traceback", "abc", "dataclasses",
     "ast", "inspect", "warnings", "logging", "time", "random", "string",
     "hashlib", "base64", "urllib", "http", "email", "html", "xml",
-    "report_app",  # 내부 패키지
+    "core",  # 내부 패키지
     "__future__",
 }
 

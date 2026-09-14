@@ -561,12 +561,12 @@ def test_etl_u11_export_excel_two_sheets(pp_module, tmp_path, capsys):
 # ETL-C01 : REGION_MAP 동일성 계약
 # ---------------------------------------------------------------------------
 def test_etl_c01_region_map_matches_report_app_config(pp_module, project_root):
-    """ETL-C01: 전처리와 report_app/config.py 의 REGION_MAP 이 완전히 동일해야 한다.
+    """ETL-C01: 전처리와 core/config.py 의 REGION_MAP 이 완전히 동일해야 한다.
 
     config.py 는 import 시 Path.cwd() 를 평가하므로(:80) 여기서는 import 하지 않고
     ast.literal_eval 로 소스에서 리터럴만 추출해 비교한다.
     """
-    config_py = project_root / "report_app" / "config.py"
+    config_py = project_root / "core" / "config.py"
     assert config_py.exists(), f"config.py 를 찾을 수 없다: {config_py}"
 
     tree = ast.parse(config_py.read_text(encoding="utf-8"))

@@ -16,7 +16,7 @@
 Stop 훅: 메모리 파일 업데이트 리마인더
 
 Claude가 작업을 완료하려 할 때 실행된다.
-이번 세션에서 report_app/ 하위 파일이 수정되었으면
+이번 세션에서 core/ 하위 파일이 수정되었으면
 관련 메모리 파일 업데이트를 요청하는 메시지를 stdout으로 출력한다.
 (stdout 출력 → Claude에게 system-reminder로 전달됨)
 """

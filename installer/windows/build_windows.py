@@ -155,7 +155,7 @@ def install_dependencies():
 # 4. 앱 파일 복사
 # ---------------------------------------------------------------------------
 def data_csv_names() -> list[str]:
-    """번들에 넣을 output CSV 파일명을 `report_app/config.py` 에서 뽑아 온다.
+    """번들에 넣을 output CSV 파일명을 `core/config.py` 에서 뽑아 온다.
 
     파일명을 여기에 하드코딩하면 config 가 바뀔 때 조용히 어긋난다.
     실제로 그렇게 어긋나 신형 `권역별_순위.csv` 가 번들에서 빠졌고,
@@ -169,7 +169,7 @@ def data_csv_names() -> list[str]:
     """
     import ast
 
-    config_src = (PROJECT_ROOT / "report_app" / "config.py").read_text(encoding="utf-8")
+    config_src = (PROJECT_ROOT / "core" / "config.py").read_text(encoding="utf-8")
     wanted = {"NATIONAL_CSV", "REGIONAL_CSV", "REGIONAL_CSV_LEGACY"}
     names: list[str] = []
     for node in ast.walk(ast.parse(config_src)):
@@ -185,7 +185,7 @@ def data_csv_names() -> list[str]:
                     names.append(sub.value)
     if not names:
         raise RuntimeError(
-            "report_app/config.py 에서 CSV 파일명을 찾지 못했다 — "
+            "core/config.py 에서 CSV 파일명을 찾지 못했다 — "
             "상수 이름이 바뀌었는지 확인할 것"
         )
     return names
@@ -198,10 +198,10 @@ def copy_app_files():
 
     APP_DIR.mkdir(parents=True, exist_ok=True)
 
-    # report_app/ 패키지
+    # core/ 패키지
     shutil.copytree(
-        PROJECT_ROOT / "report_app",
-        APP_DIR / "report_app",
+        PROJECT_ROOT / "core",
+        APP_DIR / "core",
         ignore=shutil.ignore_patterns("__pycache__"),
     )
 

@@ -26,7 +26,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from report_app.report_builder import build_report
+from core.report_builder import build_report
 from tests.conftest import PROJECT_ROOT, RAW_AVAILABLE, RAW_DIR, REALDATA_AVAILABLE
 from tests.fixtures.tiny_png import fake_charts
 

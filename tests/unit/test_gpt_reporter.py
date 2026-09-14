@@ -1,4 +1,4 @@
-"""report_app/gpt_reporter.py 단위·계약 테스트 (GPT-C01~C03, GPT-U01~U02).
+"""core/gpt_reporter.py 단위·계약 테스트 (GPT-C01~C03, GPT-U01~U02).
 
 네트워크 호출은 한 건도 하지 않는다. gpt_reporter 는 클라이언트를 스스로 만들지 않고
 첫 위치 인자로 받으며(gpt_reporter.py:47, :66, :100, :136, :170) isinstance 검사도
@@ -22,8 +22,8 @@ import numpy as np
 import openai
 import pytest
 
-import report_app.config as config
-import report_app.gpt_reporter as gpt
+import core.config as config
+import core.gpt_reporter as gpt
 from tests.fixtures.fake_openai import make_fake_client
 
 # ===========================================================================
@@ -350,7 +350,7 @@ def test_gpt_u02_module_level_university_is_followed(func_name: str, monkeypatch
     """GPT-U02: gpt_reporter 모듈 전역 UNIVERSITY 를 바꾸면 university=None 일 때 그 값이 따라온다."""
     # gpt_reporter 는 `from ... import UNIVERSITY` 로 값을 자기 전역에 복사해 두고
     # 함수 안에서 그 전역을 읽는다(gpt_reporter.py:28, :82). 따라서 패치 지점은
-    # report_app.config 가 아니라 report_app.gpt_reporter 다.
+    # core.config 가 아니라 core.gpt_reporter 다.
     monkeypatch.setattr(gpt, "UNIVERSITY", "패치대학교")
 
     client, completions = make_fake_client()

@@ -1,4 +1,4 @@
-"""report_app/data_loader.py 단위 테스트 (DL-U01~U12).
+"""core/data_loader.py 단위 테스트 (DL-U01~U12).
 
 합성 DataFrame 만 쓰므로 cwd·실데이터와 무관하다.
 확정 결함(V10/V12)은 xfail(strict) 로 **고쳐진 뒤의 기대 동작** 을 단언하고,
@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import report_app.data_loader as dl
+import core.data_loader as dl
 from tests.fixtures.make_frames import make_legacy_reg, make_nat, make_reg
 
 

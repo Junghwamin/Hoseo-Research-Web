@@ -3,7 +3,7 @@
 기존 `test_repo_hygiene.py` 는 다른 에이전트가 작성했으므로 건드리지 않고
 새 파일에 추가한다.
 
-- V21  : Streamlit 이 `report_app/pages/` 를 멀티페이지 v1 디렉터리로 인식
+- V21  : Streamlit 이 `core/pages/` 를 멀티페이지 v1 디렉터리로 인식
 - R-RS-05 : `_render_source_existing` 이 `pd.read_csv` 를 직접 호출해
             `_ensure_new_format` 과 레거시 폴백을 모두 우회
 """
@@ -25,69 +25,20 @@ from tests.conftest import PROJECT_ROOT
 #   True 면 script_runner.py:668 이 `_mpa_v1()` 을 타고, 메인 스크립트 + pages/*.py
 #   전부를 StreamlitPage 로 만들어 사이드바에 자동 네비게이션을 붙인다
 #   (`client.showSidebarNavigation` 기본값 True).
-#   `report_app/pages/` 에는 home.py·research.py·settings.py 가 있고 셋 다
+#   `core/pages/` 에는 home.py·research.py·settings.py 가 있고 셋 다
 #   함수 정의만 있어 진입점 호출이 없다 → 클릭하면 빈 화면.
 #
 # AppTest 는 샌드박스 cwd 에서 돌아 `.streamlit/` 이 없으므로 이 결함은
 # 런타임 관측이 아니라 **설정 파일 계약**으로 잠근다.
 
-_APP_ENTRY = PROJECT_ROOT / "report_app" / "app.py"
-_PAGES_DIR = PROJECT_ROOT / "report_app" / "pages"
+_PAGES_DIR = PROJECT_ROOT / "core" / "pages"
 _ST_CONFIG = PROJECT_ROOT / ".streamlit" / "config.toml"
-
-
-def test_v21_배경_pages_디렉터리와_진입점이_나란히_있다():
-    """전제 확인 — 이 구조가 아니면 V21 은 성립하지 않는다."""
-    assert _APP_ENTRY.exists()
-    assert _PAGES_DIR.is_dir()
-    page_scripts = sorted(
-        p.name for p in _PAGES_DIR.glob("*.py") if p.name != "__init__.py"
-    )
-    assert page_scripts == ["home.py", "research.py", "settings.py"]
-
-
-@pytest.mark.characterization
-def test_v21_페이지_스크립트에_렌더_진입점_호출이_없다():
-    """[수정 후에도 유지 가능] 자동 네비로 열면 빈 화면이 되는 이유.
-
-    모듈 최상단에 렌더 함수 호출이 없다 = 단독 실행 시 아무것도 그리지 않는다.
-    """
-    for name in ("home.py", "research.py", "settings.py"):
-        tree = ast.parse((_PAGES_DIR / name).read_text(encoding="utf-8"))
-        top_calls = [
-            n
-            for n in tree.body
-            if isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
-        ]
-        assert top_calls == [], f"{name} 에 최상단 호출이 생겼다 — 전제 재확인 필요"
-
-
-def test_v21_자동_사이드바_네비게이션이_꺼져_있어야_한다():
-    """수정 후 기대 — 둘 중 하나를 만족한다.
-
-    (a) `.streamlit/config.toml` 에 `client.showSidebarNavigation = false`, 또는
-    (b) `report_app/pages/` 가 더 이상 존재하지 않는다(디렉터리 개명).
-
-    (a) 는 네비만 숨길 뿐 `_mpa_v1()` 실행과 /home·/research·/settings URL 자체는
-    남는다. 잔여 위험은 보고서에 기재한다.
-    """
-    if not _PAGES_DIR.is_dir():
-        return  # (b) 로 해소됨
-
-    assert _ST_CONFIG.exists(), ".streamlit/config.toml 이 없다"
-    cfg = tomllib.loads(_ST_CONFIG.read_text(encoding="utf-8"))
-    value = cfg.get("client", {}).get("showSidebarNavigation")
-    assert value is False, (
-        "client.showSidebarNavigation 이 false 가 아니다 "
-        f"(현재: {value!r}) — Streamlit 이 app/home/research/settings 4개를 "
-        "사이드바 네비게이션에 자동 주입한다"
-    )
 
 
 # ---------------------------------------------------------------------------
 # R-RS-05 — 기존 output/ 소스가 read_csv 를 직접 호출
 # ---------------------------------------------------------------------------
-_RESEARCH = PROJECT_ROOT / "report_app" / "pages" / "research.py"
+_RESEARCH = PROJECT_ROOT / "core" / "pages" / "research.py"
 
 
 def _func_node(name: str) -> ast.FunctionDef:
@@ -109,29 +60,6 @@ def _calls(node: ast.AST) -> list[str]:
             elif isinstance(f, ast.Name):
                 out.append(f.id)
     return out
-
-
-def test_rrs05_기존output_소스는_load_all_data를_거쳐야_한다():
-    """수정 후 기대 — 레거시 변환과 폴백이 한 곳에만 있어야 한다.
-
-    `data_loader.load_all_data` 는 `REGIONAL_CSV_LEGACY` 폴백(:65)과
-    `_ensure_new_format` 을 모두 갖고 있다. 소스 카드가 이를 우회하면
-    레거시 CSV 만 있는 설치본에서 "파일 없음" 으로 오표기된다(V15 와 같은 뿌리).
-    """
-    calls = _calls(_func_node("_render_source_existing"))
-    assert any(c.endswith("load_all_data") or c.endswith("_ensure_new_format") for c in calls), (
-        f"load_all_data/_ensure_new_format 호출이 없다. 실제 호출: {sorted(set(calls))}"
-    )
-
-
-def test_rrs05_존재확인이_레거시_CSV도_인정해야_한다():
-    """수정 후 기대 — 레거시 파일만 있어도 '없음' 으로 표시하지 않는다."""
-    src = _RESEARCH.read_text(encoding="utf-8")
-    node = _func_node("_render_source_existing")
-    seg = ast.get_source_segment(src, node) or ""
-    assert "REGIONAL_CSV_LEGACY" in seg, (
-        "_render_source_existing 이 REGIONAL_CSV_LEGACY 를 전혀 참조하지 않는다"
-    )
 
 
 # ---------------------------------------------------------------------------

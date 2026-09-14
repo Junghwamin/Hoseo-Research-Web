@@ -34,7 +34,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import pandas as pd
 
-from report_app.config import COMPARE_GROUP, UNIVERSITY
+from core.config import COMPARE_GROUP, UNIVERSITY
 
 # 한글 폰트 설정 (OS별 자동 감지)
 import platform as _platform
