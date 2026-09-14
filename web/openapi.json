@@ -839,6 +839,27 @@
               ],
               "title": "Region"
             }
+          },
+          {
+            "description": "비교군 대학 이름. **반드시 보고서와 같은 값을 보내야 한다** — 생략하면 서버 기본 비교군으로 그려져 Word 와 그림이 달라진다.",
+            "in": "query",
+            "name": "compareGroup",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "비교군 대학 이름. **반드시 보고서와 같은 값을 보내야 한다** — 생략하면 서버 기본 비교군으로 그려져 Word 와 그림이 달라진다.",
+              "title": "Comparegroup"
+            }
           }
         ],
         "responses": {

@@ -227,3 +227,84 @@ class TestChartImages:
         )
         assert source.count("def _build_charts") == 1, "차트 생성 함수가 둘 이상이다"
         assert hasattr(report_module, "_build_charts")
+
+    def test_비교군을_보내면_보고서와_같은_그림이_된다(self, client):
+        """비교군을 반영하지 않으면 **화면과 Word 가 갈라진다.**
+
+        `compare` 와 `avg` 차트는 비교군이 정하는 그림이다. 엔드포인트가
+        비교군을 무시하면 사용자는 A 를 보고 B 가 실린 문서를 받는다.
+        """
+        body = client.get("/api/universities", params={"region": "충청권", "year": 2026})
+        names = [r["name"] for r in body.json()["rows"] if r["name"] != "호서대학교"]
+        picked = names[:3]
+
+        base = {"university": "호서대학교", "year": 2026}
+        default_png = client.get("/api/chart/compare.png", params=base).content
+        picked_png = client.get(
+            "/api/chart/compare.png", params={**base, "compareGroup": picked}
+        ).content
+
+        assert picked_png[:4] == b"\x89PNG"
+        assert picked_png != default_png, (
+            "비교군을 바꿨는데 같은 그림이 나왔다 — compareGroup 이 무시되고 있다"
+        )
+
+    def test_같은_입력이면_다시_그리지_않는다(self, client):
+        """matplotlib 은 한 장에 1초 가까이 걸린다.
+
+        3단계가 5장을 한 번에 붙이므로 캐시가 없으면 25번을 그리고 전부
+        `_CHART_LOCK` 에 줄을 선다. 바이트가 같은지로 캐시 적중을 본다.
+        """
+        params = {"university": "호서대학교", "year": 2026}
+        first = client.get("/api/chart/rank.png", params=params).content
+        second = client.get("/api/chart/rank.png", params=params).content
+        assert first == second
+
+
+# ---------------------------------------------------------------------------
+# 비교군 — 사용자가 고른 대로 쓰는가
+# ---------------------------------------------------------------------------
+
+
+@realdata
+class TestRequestedCompareGroup:
+    """화면이 보여주는 비교군과 보고서에 들어가는 비교군이 같아야 한다.
+
+    예전에는 `len(group) < 2` 채우기가 **요청받은 경우에도** 돌아서, 1개교만
+    고르면 말없이 권역 상위 5개교로 바뀌었다. 화면은 "1개교 선택" 인데
+    보고서에는 5개교가 실렸다.
+    """
+
+    @staticmethod
+    def _post(client, **kw):
+        body = {"university": "호서대학교", "year": 2026, **kw}
+        r = client.post("/api/stats", json=body)
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    def test_하나만_골라도_바꿔치지_않는다(self, client):
+        body = self._post(client, compareGroup=["순천향대학교"])
+        assert body["compareGroup"] == ["호서대학교", "순천향대학교"]
+        assert body["compareGroupNote"] is None
+
+    def test_고른_순서를_지킨다(self, client):
+        picked = ["단국대학교", "순천향대학교"]
+        body = self._post(client, compareGroup=picked)
+        # 첫 항목은 언제나 대상 대학이다 — 비교 차트에 자기 막대가 있어야 한다
+        assert body["compareGroup"] == ["호서대학교", *picked]
+
+    def test_대상_자신을_넣어도_중복되지_않는다(self, client):
+        body = self._post(client, compareGroup=["호서대학교", "순천향대학교"])
+        assert body["compareGroup"] == ["호서대학교", "순천향대학교"]
+
+    def test_권역에_없는_대학은_빼고_사유를_알린다(self, client):
+        # 조용히 빠지면 비교군 개수가 왜 안 맞는지 알 수 없다
+        body = self._post(client, compareGroup=["순천향대학교", "부산외국어대학교"])
+        assert "부산외국어대학교" not in body["compareGroup"]
+        assert body["compareGroupNote"] is not None
+        assert "부산외국어대학교" in body["compareGroupNote"]
+
+    def test_고르지_않으면_기본_비교군이_들어온다(self, client):
+        body = self._post(client)
+        assert len(body["compareGroup"]) >= 3
+

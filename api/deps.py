@@ -20,7 +20,16 @@ import core.data_loader as dl
 from core.config import COMPARE_GROUP, UNIVERSITY
 
 #: 비교군이 대상 대학 하나만 남지 않도록 채울 최소 인원(R-RS-02).
+#:
+#: **기본 비교군 경로에만 쓴다.** 사용자가 직접 고른 비교군을 이 값으로
+#: 자르면, 화면에 "7개교 선택" 이라고 띄워 놓고 보고서에는 4개교만 넣게 된다.
 COMPARE_FALLBACK_SIZE = 4
+
+#: 사용자가 직접 고를 수 있는 비교군 상한.
+#:
+#: 막대가 스무 개를 넘으면 차트에서 이름이 겹쳐 읽히지 않는다. 다만 넘겼을
+#: 때 **조용히 자르지 않고** 사유를 올려보낸다.
+MAX_REQUESTED_COMPARE = 20
 
 
 @lru_cache(maxsize=1)
@@ -77,19 +86,61 @@ def resolve_compare_group(
 ) -> tuple[list[str], str | None]:
     """비교군과, 정상 구성에 실패했다면 그 사유를 돌려준다. **대상 대학 하나만 남는 일은 없다.**
 
+    경로가 둘이고, **규칙이 다르다.**
+
+    - `requested` 가 있으면 **사용자가 고른 대로** 쓴다. 뺄 이유가 있으면
+      (그 해 그 권역에 없는 대학, 상한 초과) 반드시 사유를 함께 올려보낸다.
+    - `requested` 가 없으면 기본 비교군을 쓰고, 그것이 부실하면 권역 상위로
+      채운다.
+
     R-RS-02: `config.COMPARE_GROUP` 5개교가 전부 충청권이라, 대상이 다른
     권역이면 후보가 전부 걸러져 비교군이 자기 자신뿐이 됐다. 그러면
     '비교군평균' 이 대상 대학의 값과 같아지는데 경고조차 없었다.
     권역에 기본 비교군이 없으면 같은 권역 상위 대학으로 채운다.
-    """
-    if requested:
-        group = [u for u in requested if u != university]
-    else:
-        # 기본 비교군 중 이 권역에 실제로 있는 대학만
-        in_region = set(_region_universities(regional_df, region_name, year))
-        group = [u for u in COMPARE_GROUP if u != university and u in in_region]
 
+    돌려주는 목록의 **첫 항목은 언제나 대상 대학**이다. 비교 차트에 대상의
+    막대가 없으면 무엇과 비교하는지 알 수 없다.
+    """
+    in_region = set(_region_universities(regional_df, region_name, year))
     note: str | None = None
+
+    if requested:
+        # **사용자가 고른 것은 그대로 쓴다.** 하나만 골랐어도 그건 선택이다.
+        #
+        # 예전에는 아래 `len(group) < 2` 채우기가 요청받은 경우에도 돌아서,
+        # 비교군을 1개교만 고르면 말없이 권역 상위 5개교로 바뀌었다. 화면은
+        # "1개교 선택" 이라고 하는데 보고서에는 5개교가 실렸다.
+        group = [u for u in requested if u != university]
+
+        # 그 해 그 권역에 없는 이름은 계산에서 어차피 빠진다. 조용히 빠지면
+        # 비교군 개수가 안 맞는 이유를 알 수 없으므로 사유로 올려보낸다.
+        missing = [u for u in group if u not in in_region]
+        if missing:
+            group = [u for u in group if u in in_region]
+            note = (
+                f"{year}년 {region_name}에 없는 대학을 비교군에서 뺐다: "
+                f"{', '.join(missing)}"
+            )
+
+        if len(group) > MAX_REQUESTED_COMPARE:
+            # 막대가 스무 개를 넘으면 차트가 읽히지 않는다. 자르되 **말하고**
+            # 자른다 — 조용히 자르면 고른 대학이 왜 없는지 알 수 없다.
+            note = (
+                f"비교군은 최대 {MAX_REQUESTED_COMPARE}개교까지다. "
+                f"고른 {len(group)}개교 중 앞 {MAX_REQUESTED_COMPARE}개교만 쓴다."
+            )
+            group = group[:MAX_REQUESTED_COMPARE]
+
+        if not group and note is None:
+            note = (
+                f"{university} 자신만 비교군에 있다. "
+                f"비교군 평균은 {university} 자신의 값이다."
+            )
+        return [university, *group], note
+
+    # 기본 비교군 중 이 권역에 실제로 있는 대학만
+    group = [u for u in COMPARE_GROUP if u != university and u in in_region]
+
     if len(group) < 2:
         group = _region_top(regional_df, region_name, year, exclude=university)
 
@@ -158,6 +209,7 @@ def require_year(year: int, national_df: pd.DataFrame) -> None:
 
 __all__ = [
     "COMPARE_FALLBACK_SIZE",
+    "MAX_REQUESTED_COMPARE",
     "UNIVERSITY",
     "get_frames",
     "require_university",

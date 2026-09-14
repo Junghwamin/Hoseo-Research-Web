@@ -22,11 +22,12 @@ from __future__ import annotations
 
 import os
 import threading
+from collections import OrderedDict
 from io import BytesIO
 from urllib.parse import quote
 
 import pandas as pd
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 
 import core.chart_generator as cg
@@ -269,12 +270,61 @@ CHART_TITLES = {
 }
 
 
+#: 렌더한 차트 묶음 캐시. 키는 그림을 결정하는 입력 전부다.
+#:
+#: `_build_charts` 는 **5종을 한 번에** 그린다. 화면이 5장을 붙이면 요청도
+#: 5번 오는데, 캐시가 없으면 25번을 그리고 그 전부가 `_CHART_LOCK` 에 줄을
+#: 선다 — 3단계 첫 로딩이 20초를 넘는다.
+#:
+#: 크기를 작게 두는 이유: figure 하나가 수백 KB 다. 사용자는 보통 한두 대상을
+#: 오간다.
+_CHART_CACHE: "OrderedDict[tuple, dict[str, BytesIO]]" = OrderedDict()
+_CHART_CACHE_MAX = 4
+
+
+def _charts_for(
+    university: str,
+    year: int,
+    region: str | None,
+    compare_group: list[str] | None,
+) -> dict[str, BytesIO]:
+    """5종 차트를 그려 돌려준다. 같은 입력이면 다시 그리지 않는다."""
+    national_df, regional_df, region_name, group = _resolve(
+        university, year, region, compare_group
+    )
+    # 키는 **확정된** 값으로 만든다. 요청이 region 을 생략해도 서버가 판정한
+    # 권역이 같으면 같은 그림이므로 캐시가 맞는다.
+    key = (university, year, region_name, tuple(group))
+
+    with _CHART_LOCK:
+        cached = _CHART_CACHE.get(key)
+        if cached is not None:
+            _CHART_CACHE.move_to_end(key)
+            return cached
+
+        stats = _collect_stats(
+            national_df, regional_df, university, region_name, year, group
+        )
+        charts = _build_charts(regional_df, stats, university, region_name, year)
+        _CHART_CACHE[key] = charts
+        while len(_CHART_CACHE) > _CHART_CACHE_MAX:
+            _CHART_CACHE.popitem(last=False)
+        return charts
+
+
 @router.get("/chart/{kind}.png")
 def get_chart(
     kind: str,
     university: str,
     year: int,
     region: str | None = None,
+    compareGroup: list[str] | None = Query(  # noqa: N803 — 프론트 키 이름을 따른다
+        None,
+        description=(
+            "비교군 대학 이름. **반드시 보고서와 같은 값을 보내야 한다** — "
+            "생략하면 서버 기본 비교군으로 그려져 Word 와 그림이 달라진다."
+        ),
+    ),
 ) -> Response:
     """Word 보고서에 들어가는 것과 **같은** PNG 를 돌려준다.
 
@@ -291,17 +341,7 @@ def get_chart(
             detail=f"없는 차트 종류: {kind}. 가능: {list(schemas.CHART_KEYS)}",
         )
 
-    national_df, regional_df, region_name, group = _resolve(
-        university, year, region, None
-    )
-    stats = _collect_stats(
-        national_df, regional_df, university, region_name, year, group
-    )
-
-    with _CHART_LOCK:
-        charts = _build_charts(regional_df, stats, university, region_name, year)
-
-    payload = charts[kind].getvalue()
+    payload = _charts_for(university, year, region, compareGroup)[kind].getvalue()
     return Response(
         content=payload,
         media_type="image/png",

@@ -477,6 +477,8 @@ export interface operations {
                 university: string;
                 year: number;
                 region?: string | null;
+                /** @description 비교군 대학 이름. **반드시 보고서와 같은 값을 보내야 한다** — 생략하면 서버 기본 비교군으로 그려져 Word 와 그림이 달라진다. */
+                compareGroup?: string[] | null;
             };
             header?: never;
             path: {
