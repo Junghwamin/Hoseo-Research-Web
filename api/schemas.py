@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 # ---------------------------------------------------------------------------
@@ -80,16 +80,16 @@ class TrendPoint(BaseModel):
     faculty: int
     perCapita: float
     # 권역 데이터가 없으면 None. 0 과 구분해야 한다.
-    regionalRank: int | None = None
-    nationalRank: int | None = None
+    regionalRank: int | None
+    nationalRank: int | None
 
 
 class Averages(BaseModel):
     """한 해의 평균 3종. 모집단이 비면 0.0 이 아니라 None 이다."""
 
-    national: float | None = None
-    regional: float | None = None
-    compareGroup: float | None = None
+    national: float | None
+    regional: float | None
+    compareGroup: float | None
 
 
 class RankChange(BaseModel):
@@ -100,10 +100,10 @@ class RankChange(BaseModel):
     개선을 하락으로 표시했던 결함이다. 여기서 못박고 프론트는 그대로 쓴다.
     """
 
-    regionalRank: int | None = None
-    nationalRank: int | None = None
-    regionalRankDelta: int | None = None
-    nationalRankDelta: int | None = None
+    regionalRank: int | None
+    nationalRank: int | None
+    regionalRankDelta: int | None
+    nationalRankDelta: int | None
 
 
 class CompareRow(BaseModel):
@@ -113,8 +113,8 @@ class CompareRow(BaseModel):
     faculty: int
     papers: float
     perCapita: float
-    nationalRank: int | None = None
-    regionalRank: int | None = None
+    nationalRank: int | None
+    regionalRank: int | None
 
 
 class YoYEntry(BaseModel):
@@ -123,15 +123,15 @@ class YoYEntry(BaseModel):
     name: str
     # 이전값이 0 이면 증감률을 낼 수 없다. 0.0 이 아니라 None 을 보낸다 —
     # V12 에서 신규 실적이 "+0.0%" 로 표기되던 결함의 수정 결과다.
-    changeRate: float | None = None
+    changeRate: float | None
     baseValue: float
     compareValue: float
 
 
 class YoYChanges(BaseModel):
-    top: list[YoYEntry] = Field(default_factory=list)
-    bottom: list[YoYEntry] = Field(default_factory=list)
-    target: YoYEntry | None = None
+    top: list[YoYEntry]
+    bottom: list[YoYEntry]
+    target: YoYEntry | None
 
 
 class DatasetInfo(BaseModel):
@@ -161,7 +161,7 @@ class StatsResponse(BaseModel):
     #: 비교군을 정상적으로 채우지 못했으면 그 이유. 정상이면 None.
     #: R-RS-02 의 교훈 — 자기 자신과 비교하게 되는 상황을 **조용히** 넘기지 않는다.
     #: (제주권은 전 연도에 걸쳐 대학이 1개교뿐이라 실제로 발생한다.)
-    compareGroupNote: str | None = None
+    compareGroupNote: str | None
     trend: dict[int, TrendPoint]
     averages: dict[int, Averages]
     rankChanges: dict[int, RankChange]

@@ -50,10 +50,14 @@ test('API 에서 받은 실제 수치를 그린다', async ({ page }) => {
 
   // 2026년 호서대: 전국 71위 / 권역 17위 / 1인당 0.1297편 / 교원 406명
   // 원본 Streamlit 판과 대조해 확인한 값이다.
-  await expect(page.getByText('71위')).toBeVisible()
-  await expect(page.getByText('17위')).toBeVisible()
-  await expect(page.getByText('0.1297편')).toBeVisible()
-  await expect(page.getByText('406명')).toBeVisible()
+  //
+  // 비교군 표에도 같은 문자열이 나오므로 지표 섹션으로 범위를 좁힌다.
+  // (Playwright 는 다중 일치를 실패로 본다 — 좁히는 것이 맞다.)
+  const metrics = page.getByRole('region', { name: '주요 지표' })
+  await expect(metrics.getByText('71위')).toBeVisible()
+  await expect(metrics.getByText('17위')).toBeVisible()
+  await expect(metrics.getByText('0.1297편')).toBeVisible()
+  await expect(metrics.getByText('406명')).toBeVisible()
 
   await expect(page.getByText('호서대학교 · 충청권 · 2026년')).toBeVisible()
 })
@@ -82,7 +86,59 @@ test('추이 차트가 접근 가능한 표를 함께 제공한다', async ({ pa
   await expect(chart).toBeVisible()
 
   // SVG 는 스크린리더가 못 읽는다. 같은 수치가 표에도 있어야 한다.
-  const table = page.getByRole('table')
+  // 화면에 표가 둘(추이 접근성 표 + 비교군 표)이라 이름으로 좁힌다.
+  const table = page.getByRole('table', { name: /추이/ })
   await expect(table).toContainText('2026년')
   await expect(table).toContainText('0.1297')
+})
+
+test('비교군 표를 실제 수치로 그린다', async ({ page }) => {
+  await page.goto('/')
+
+  const table = page.getByRole('table', { name: /비교군/ })
+  await expect(table).toBeVisible()
+
+  // 2026년 충청권 비교군 5개교. 원본 Streamlit 코어와 대조한 값이다.
+  await expect(table).toContainText('931명')      // 순천향대 전임교원수
+  await expect(table).toContainText('368.8편')    // 순천향대 논문수(소수 1자리)
+  await expect(table).toContainText('0.3961')     // 순천향대 1인당(소수 4자리)
+  await expect(table).toContainText('26위')       // 순천향대 전국순위
+
+  // 실적이 0 에 가까운 대학도 값 없음(—)이 아니라 숫자로 찍힌다
+  await expect(table).toContainText('0.0270')
+})
+
+test('증감 패널이 과거 → 현재 순서로 적는다 (R-RS-03)', async ({ page }) => {
+  await page.goto('/')
+
+  const target = page.getByTestId('yoy-target')
+  await expect(target).toBeVisible()
+  await expect(target).toContainText('+9.7%')
+
+  // 원본 Streamlit 판은 "2026 → 2025" 로 시간이 거꾸로 흐르는 문구를 찍었다.
+  await expect(target).toContainText('2025년 0.1182 → 2026년 0.1297')
+})
+
+test('증감 상·하위가 각각 이름 붙은 영역으로 그려진다', async ({ page }) => {
+  await page.goto('/')
+
+  const top = page.getByRole('group', { name: /증가 상위/ })
+  const bottom = page.getByRole('group', { name: /감소 하위/ })
+
+  await expect(top).toContainText('+196.7%')
+  await expect(bottom).toContainText('-50.5%')
+
+  // 부호가 보존되어야 한다. 절대값만 찍으면 감소가 증가처럼 보인다.
+  await expect(bottom).toContainText('▼')
+  await expect(top).toContainText('▲')
+})
+
+test('증감률 null 이 "+0.0%" 로 새어나오지 않는다 (V12)', async ({ page }) => {
+  await page.goto('/')
+
+  // 충청권 2026 에는 null 이 없지만, 화면 어디에도 "+0.0%" 가 없어야 한다는
+  // 계약 자체를 잠근다. null 을 0 으로 접는 회귀가 생기면 여기서 먼저 걸린다.
+  const panel = page.getByRole('region', { name: '전년 대비 증감' })
+  await expect(panel).toBeVisible()
+  await expect(panel.getByText('+0.0%')).toHaveCount(0)
 })

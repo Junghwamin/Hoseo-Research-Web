@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 
 import { api, ApiError, byYear, type DatasetInfo, type StatsResponse } from './api/client'
+import { CompareTable } from './components/CompareTable/CompareTable'
 import { MetricCard } from './components/MetricCard/MetricCard'
 import type { DeltaDirection } from './components/MetricCard/types'
 import { TrendChart } from './components/TrendChart/TrendChart'
+import { YoYPanel } from './components/YoYPanel/YoYPanel'
 import { FEATURES } from './features'
 import { useTheme } from './theme/useTheme'
 
@@ -222,6 +224,36 @@ export default function App() {
               : '추이 차트'
           }
           precision={4}
+          loading={loading}
+        />
+      </section>
+
+      <section aria-label="비교군 현황">
+        <h2 className="mb-[var(--spacing-3)] text-lg font-semibold text-[var(--text-primary)]">
+          비교군 현황
+        </h2>
+        <CompareTable
+          rows={stats?.compare ?? []}
+          caption={
+            stats
+              ? `${stats.year}년 ${stats.regionName} 비교군 ${stats.compare.length}개교 연구실적`
+              : '비교군 연구실적'
+          }
+          highlightName={stats?.university}
+          loading={loading}
+        />
+      </section>
+
+      <section aria-label="전년 대비 증감">
+        <h2 className="mb-[var(--spacing-3)] text-lg font-semibold text-[var(--text-primary)]">
+          전년 대비 증감
+        </h2>
+        {/* baseYear 는 현재 연도, compareYear 는 그 이전 해다. 순서를 뒤집으면
+            화면에 "2026 → 2025" 가 남는다(R-RS-03). */}
+        <YoYPanel
+          changes={stats?.yoy ?? { top: [], bottom: [], target: null }}
+          baseYear={year ?? 0}
+          compareYear={(year ?? 1) - 1}
           loading={loading}
         />
       </section>

@@ -38,6 +38,11 @@
             "title": "Regional"
           }
         },
+        "required": [
+          "national",
+          "regional",
+          "compareGroup"
+        ],
         "title": "Averages",
         "type": "object"
       },
@@ -87,7 +92,9 @@
           "name",
           "faculty",
           "papers",
-          "perCapita"
+          "perCapita",
+          "nationalRank",
+          "regionalRank"
         ],
         "title": "CompareRow",
         "type": "object"
@@ -188,6 +195,12 @@
             "title": "Regionalrankdelta"
           }
         },
+        "required": [
+          "regionalRank",
+          "nationalRank",
+          "regionalRankDelta",
+          "nationalRankDelta"
+        ],
         "title": "RankChange",
         "type": "object"
       },
@@ -325,6 +338,7 @@
           "year",
           "regionName",
           "compareGroup",
+          "compareGroupNote",
           "trend",
           "averages",
           "rankChanges",
@@ -375,7 +389,9 @@
         "required": [
           "papers",
           "faculty",
-          "perCapita"
+          "perCapita",
+          "regionalRank",
+          "nationalRank"
         ],
         "title": "TrendPoint",
         "type": "object"
@@ -447,6 +463,11 @@
             "type": "array"
           }
         },
+        "required": [
+          "top",
+          "bottom",
+          "target"
+        ],
         "title": "YoYChanges",
         "type": "object"
       },
@@ -479,6 +500,7 @@
         },
         "required": [
           "name",
+          "changeRate",
           "baseValue",
           "compareValue"
         ],

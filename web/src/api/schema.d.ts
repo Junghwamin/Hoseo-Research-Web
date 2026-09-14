@@ -99,11 +99,11 @@ export interface components {
          */
         Averages: {
             /** Comparegroup */
-            compareGroup?: number | null;
+            compareGroup: number | null;
             /** National */
-            national?: number | null;
+            national: number | null;
             /** Regional */
-            regional?: number | null;
+            regional: number | null;
         };
         /**
          * CompareRow
@@ -115,13 +115,13 @@ export interface components {
             /** Name */
             name: string;
             /** Nationalrank */
-            nationalRank?: number | null;
+            nationalRank: number | null;
             /** Papers */
             papers: number;
             /** Percapita */
             perCapita: number;
             /** Regionalrank */
-            regionalRank?: number | null;
+            regionalRank: number | null;
         };
         /**
          * DatasetInfo
@@ -152,13 +152,13 @@ export interface components {
          */
         RankChange: {
             /** Nationalrank */
-            nationalRank?: number | null;
+            nationalRank: number | null;
             /** Nationalrankdelta */
-            nationalRankDelta?: number | null;
+            nationalRankDelta: number | null;
             /** Regionalrank */
-            regionalRank?: number | null;
+            regionalRank: number | null;
             /** Regionalrankdelta */
-            regionalRankDelta?: number | null;
+            regionalRankDelta: number | null;
         };
         /**
          * RegionsResponse
@@ -192,7 +192,7 @@ export interface components {
             /** Comparegroup */
             compareGroup: string[];
             /** Comparegroupnote */
-            compareGroupNote?: string | null;
+            compareGroupNote: string | null;
             /** Rankchanges */
             rankChanges: {
                 [key: string]: components["schemas"]["RankChange"];
@@ -217,13 +217,13 @@ export interface components {
             /** Faculty */
             faculty: number;
             /** Nationalrank */
-            nationalRank?: number | null;
+            nationalRank: number | null;
             /** Papers */
             papers: number;
             /** Percapita */
             perCapita: number;
             /** Regionalrank */
-            regionalRank?: number | null;
+            regionalRank: number | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -241,10 +241,10 @@ export interface components {
         /** YoYChanges */
         YoYChanges: {
             /** Bottom */
-            bottom?: components["schemas"]["YoYEntry"][];
-            target?: components["schemas"]["YoYEntry"] | null;
+            bottom: components["schemas"]["YoYEntry"][];
+            target: components["schemas"]["YoYEntry"] | null;
             /** Top */
-            top?: components["schemas"]["YoYEntry"][];
+            top: components["schemas"]["YoYEntry"][];
         };
         /**
          * YoYEntry
@@ -254,7 +254,7 @@ export interface components {
             /** Basevalue */
             baseValue: number;
             /** Changerate */
-            changeRate?: number | null;
+            changeRate: number | null;
             /** Comparevalue */
             compareValue: number;
             /** Name */
