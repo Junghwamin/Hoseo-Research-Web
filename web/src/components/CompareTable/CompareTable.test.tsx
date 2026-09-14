@@ -380,3 +380,46 @@ describe('CompareTable — 접근성', () => {
     expect(await axe(container)).toHaveNoViolations()
   })
 })
+
+
+// ---------------------------------------------------------------------------
+// 회귀 구멍 메우기
+//
+// 아래 셋은 구현에 돌연변이를 주입했을 때 기존 37개가 **전부 살아남아서**
+// 추가한 것이다. 구현은 옳았지만 테스트가 그것을 증명하지 못했다.
+// ---------------------------------------------------------------------------
+
+describe('CompareTable — 회귀 구멍 메우기', () => {
+  it('가로 스크롤 영역에 접근 가능한 이름이 붙는다', () => {
+    // 이름 없는 스크롤 영역은 스크린리더의 영역 목록에서 구분되지 않는다.
+    // caption 을 필수로 만든 근거가 여기서도 지켜져야 한다.
+    render(<CompareTable rows={[hoseo]} caption={CAPTION} />)
+    expect(screen.getByRole('region', { name: CAPTION })).toBeInTheDocument()
+  })
+
+  it('학교명이 중복돼도 재렌더에서 행이 사라지지 않는다', () => {
+    // React key 충돌은 최초 렌더가 아니라 **목록이 바뀌는 재렌더**에서
+    // 행 누락으로 나타난다. 단발 렌더로는 재현되지 않는다.
+    const dupA: CompareRow = { ...hoseo, name: '같은대학교', faculty: 100 }
+    const dupB: CompareRow = { ...nazarene, name: '같은대학교', faculty: 200 }
+
+    const { rerender } = render(
+      <CompareTable rows={[dupA, dupB]} caption={CAPTION} />,
+    )
+    expect(screen.getAllByRole('rowheader', { name: /같은대학교/ })).toHaveLength(2)
+
+    // 앞에 한 행을 끼워 인덱스를 밀어도 세 행이 모두 남아야 한다
+    rerender(<CompareTable rows={[hoseo, dupA, dupB]} caption={CAPTION} />)
+    expect(screen.getAllByRole('rowheader', { name: /같은대학교/ })).toHaveLength(2)
+    expect(screen.getByText('100명')).toBeInTheDocument()
+    expect(screen.getByText('200명')).toBeInTheDocument()
+  })
+
+  it('네 자리 논문수에도 천단위 구분자가 붙는다', () => {
+    // 성균관대(1,636.36편)처럼 네 자리가 실제로 있다. 교원수로만 잠가 두면
+    // 논문수 포매터의 useGrouping 을 꺼도 테스트가 전부 통과한다.
+    const big: CompareRow = { ...hoseo, papers: 1636.36 }
+    render(<CompareTable rows={[big]} caption={CAPTION} />)
+    expect(screen.getByText('1,636.4편')).toBeInTheDocument()
+  })
+})
