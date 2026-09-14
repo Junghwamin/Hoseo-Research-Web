@@ -43,7 +43,11 @@ def mount_web() -> None:
 
     app.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")
 
-    @app.get("/{full_path:path}")
+    # OpenAPI 스키마에서 제외한다. 이건 API 엔드포인트가 아니라 정적 파일
+    # 서빙이고, 무엇보다 **web/dist 존재 여부에 따라 스키마가 달라지면 안 된다.**
+    # 프론트를 빌드했는지에 따라 생성 타입이 갈리면 드리프트 가드가 환경 탓으로
+    # 실패한다(실제로 CI 에서 그렇게 터졌다).
+    @app.get("/{full_path:path}", include_in_schema=False)
     def spa(full_path: str) -> FileResponse:
         # 클라이언트 라우팅: 알 수 없는 경로는 index.html 로 넘겨 React 가 처리한다
         candidate = WEB_DIST / full_path

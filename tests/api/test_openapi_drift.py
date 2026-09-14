@@ -83,3 +83,41 @@ def test_응답_모델에_한글_키가_새어나오지_않는다():
         f"응답 모델에 한글 필드명이 있다: {offenders}. "
         "api/schemas.py 의 번역표에 추가해야 한다."
     )
+
+
+def test_스키마가_프론트_빌드_여부에_좌우되지_않는다():
+    """`web/dist` 가 있든 없든 OpenAPI 가 같아야 한다.
+
+    CI 에서 실제로 터진 문제다. pytest job 은 프론트를 빌드하지 않으므로
+    `mount_web()` 이 SPA 캐치올을 등록하지 않는데, 로컬에서 만든
+    openapi.json 에는 그게 들어 있어 드리프트로 잡혔다.
+
+    정적 파일 서빙은 API 가 아니다. 스키마에서 빼는 것이 옳고, 그래야
+    타입 생성이 "빌드를 했는가" 에 휘둘리지 않는다.
+    """
+    import importlib
+    import sys
+
+    dist = PROJECT_ROOT / "web" / "dist"
+    if not dist.is_dir():
+        pytest.skip("web/dist 가 없어 두 상태를 비교할 수 없다")
+
+    with_dist = json.dumps(_current(), sort_keys=True)
+
+    hidden = dist.with_name("_dist_hidden_for_test")
+    dist.rename(hidden)
+    try:
+        for name in [k for k in sys.modules if k.startswith("api")]:
+            del sys.modules[name]
+        reloaded = importlib.import_module("api.main")
+        without_dist = json.dumps(reloaded.app.openapi(), sort_keys=True)
+    finally:
+        hidden.rename(dist)
+        for name in [k for k in sys.modules if k.startswith("api")]:
+            del sys.modules[name]
+        importlib.import_module("api.main")
+
+    assert with_dist == without_dist, (
+        "프론트 빌드 여부에 따라 OpenAPI 가 달라진다. "
+        "정적 서빙 라우트에 include_in_schema=False 가 빠졌을 것이다."
+    )
