@@ -73,6 +73,7 @@ export function Step3Charts({ state }: StepProps) {
           regionName={stats.regionName}
           compareGroup={stats.compareGroup}
           years={stats.years}
+          dataVersion={stats.dataVersion}
           // 추이는 위에서 인터랙티브로 봤다. 같은 그림을 두 번 그리면
           // 화면만 길어진다.
           kinds={['bar', 'avg', 'rank', 'compare']}

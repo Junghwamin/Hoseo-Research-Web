@@ -87,6 +87,11 @@ def safe_name(filename: str | None) -> str:
             detail=f"xlsx 파일만 받는다: {name}",
         )
 
+    # 확장자를 소문자로 못박는다. `scan_raw_files` 가 `glob("*.xlsx")` 로 찾기
+    # 때문에, `.XLSX` 로 저장하면 **저장은 되는데 전처리가 건너뛴다** —
+    # 사용자에게는 "올렸는데 아무 일도 안 일어났다" 로 보인다.
+    name = name[: -len(".xlsx")] + ".xlsx"
+
     # 연도를 못 읽는 파일은 전처리가 조용히 건너뛴다. 올릴 때 막아야
     # "올렸는데 아무 일도 안 일어났다" 가 되지 않는다.
     if not pp.YEAR_PATTERN.search(name):
@@ -193,12 +198,42 @@ def _replace_outputs(staging: Path, out: Path) -> Path | None:
         for src in existing:
             shutil.copy2(src, backup / src.name)
 
-    for src in staging.iterdir():
-        if src.is_file():
-            shutil.copy2(src, out / src.name)
+    # 파일을 하나씩 덮어쓰므로 **중간에 실패하면 절반만 새 데이터**가 된다
+    # (연도가 섞인 CSV 한 벌). 방금 만든 백업으로 되돌린다 — 되돌릴 것이
+    # 없으면(첫 전처리) 반쯤 쓰인 파일을 치운다.
+    written: list[Path] = []
+    try:
+        for src in staging.iterdir():
+            if src.is_file():
+                shutil.copy2(src, out / src.name)
+                written.append(out / src.name)
+    except OSError:
+        _restore(backup, written, out)
+        raise
 
     _prune_backups(out)
     return backup
+
+
+def _restore(backup: Path | None, written: list[Path], out: Path) -> None:
+    """반쯤 덮어쓴 `output/` 을 되돌린다.
+
+    여기서 손을 놓으면 **CSV 한 벌 안에서 연도가 섞인다.** 그 상태는 오류로
+    보이지 않고 그냥 틀린 숫자로 보이므로, 사용자가 알아차릴 방법이 없다.
+    """
+    if backup is None:
+        for path in written:
+            path.unlink(missing_ok=True)
+        return
+    for path in written:
+        source = backup / path.name
+        try:
+            if source.exists():
+                shutil.copy2(source, path)
+            else:
+                path.unlink(missing_ok=True)
+        except OSError:
+            continue
 
 
 def _prune_backups(out: Path) -> None:

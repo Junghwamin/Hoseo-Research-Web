@@ -442,6 +442,8 @@ export interface components {
             compareGroup: string[];
             /** Comparegroupnote */
             compareGroupNote: string | null;
+            /** Dataversion */
+            dataVersion: number;
             /** Rankchanges */
             rankChanges: {
                 [key: string]: components["schemas"]["RankChange"];
@@ -560,6 +562,8 @@ export interface operations {
                 compareGroup?: string[] | null;
                 /** @description 분석 연도. 비교군과 같은 이유로 **보고서와 같은 값을 보내야 한다** — 생략하면 전 연도로 그려져 화면의 추이 차트와 Word 가 갈라진다. */
                 years?: number[] | null;
+                /** @description 데이터 판(`StatsResponse.dataVersion`). **서버는 쓰지 않는다** — 브라우저 캐시를 깨기 위한 것이다. 이 응답에는 `max-age` 가 붙어 있어서, 전처리로 데이터가 바뀌어도 주소가 같으면 브라우저가 서버에 묻지 않고 옛 그림을 계속 쓴다. */
+                v?: number | null;
             };
             header?: never;
             path: {

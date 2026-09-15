@@ -11,6 +11,7 @@ const base = {
   regionName: '충청권',
   compareGroup: ['순천향대학교', '단국대학교'],
   years: [2024, 2025, 2026],
+  dataVersion: 0,
 }
 
 describe('ChartGallery', () => {
@@ -38,6 +39,14 @@ describe('ChartGallery', () => {
     const src = screen.getByRole('img').getAttribute('src')!
     const params = new URLSearchParams(src.split('?')[1])
     expect(params.getAll('years')).toEqual(['2024', '2025', '2026'])
+  })
+
+  it('데이터 판을 주소에 실어 브라우저 캐시를 깬다', () => {
+    // 응답에 max-age 가 붙어 있어서, 전처리로 데이터를 갈아끼워도 주소가
+    // 같으면 브라우저가 서버에 묻지 않고 옛 PNG 를 5분간 계속 쓴다.
+    render(<ChartGallery {...base} dataVersion={3} kinds={['rank']} />)
+    const src = screen.getByRole('img').getAttribute('src')!
+    expect(new URLSearchParams(src.split('?')[1]).get('v')).toBe('3')
   })
 
   it('연도가 null 이면 주소에도 없다', () => {

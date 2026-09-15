@@ -33,7 +33,7 @@ from fastapi.responses import Response
 import core.chart_generator as cg
 import core.gpt_reporter as gpt
 import core.report_builder as rb
-from api import analysis, schemas
+from api import analysis, deps, schemas
 
 router = APIRouter(prefix="/api", tags=["report"])
 
@@ -235,6 +235,22 @@ _CHART_CACHE: "OrderedDict[tuple, dict[str, BytesIO]]" = OrderedDict()
 _CHART_CACHE_MAX = 4
 
 
+@deps.on_reset
+def _drop_chart_cache() -> None:
+    """데이터가 교체되면 그려 둔 그림을 전부 버린다.
+
+    **이 훅이 없으면 화면과 Word 가 갈라진다.** `/api/report` 는 캐시를 거치지
+    않고 `_build_charts` 를 직접 부르므로 새 데이터로 그리는데, `/api/chart` 는
+    캐시 히트라 옛 PNG 를 준다. 키에 데이터 판이 없어서 생기는 일이고,
+    전처리로 재시작 없이 데이터를 바꿀 수 있게 되면서 도달 가능해졌다.
+
+    `deps` 쪽에 등록하는 이유는 의존 방향이다. `deps` 가 이 모듈을 import 하면
+    거꾸로 선다 — 캐시를 가진 쪽이 등록하면 방향이 지켜진다.
+    """
+    with _CHART_LOCK:
+        _CHART_CACHE.clear()
+
+
 def _charts_for(
     university: str,
     year: int,
@@ -286,6 +302,15 @@ def get_chart(
         description=(
             "분석 연도. 비교군과 같은 이유로 **보고서와 같은 값을 보내야 한다** — "
             "생략하면 전 연도로 그려져 화면의 추이 차트와 Word 가 갈라진다."
+        ),
+    ),
+    v: int | None = Query(
+        None,
+        description=(
+            "데이터 판(`StatsResponse.dataVersion`). **서버는 쓰지 않는다** — "
+            "브라우저 캐시를 깨기 위한 것이다. 이 응답에는 `max-age` 가 붙어 "
+            "있어서, 전처리로 데이터가 바뀌어도 주소가 같으면 브라우저가 "
+            "서버에 묻지 않고 옛 그림을 계속 쓴다."
         ),
     ),
 ) -> Response:

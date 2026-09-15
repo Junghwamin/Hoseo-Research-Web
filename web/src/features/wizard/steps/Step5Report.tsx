@@ -25,6 +25,14 @@ export function Step5Report({ state }: StepProps) {
 
   const empty = NARRATIVE_KEYS.filter((k) => !narratives[k].trim())
 
+  // 보고서에 **실제로 들어가는** 해. 서버가 추이 계열에 담은 것이 곧 문서의
+  // 표와 차트가 되므로, 요약도 같은 곳에서 뽑아야 문서와 어긋나지 않는다.
+  const reportYears = stats
+    ? Object.keys(stats.trend)
+        .map(Number)
+        .sort((a, b) => a - b)
+    : []
+
   async function download() {
     if (!stats) return
     setBusy(true)
@@ -73,7 +81,11 @@ export function Step5Report({ state }: StepProps) {
 
         <dt className="text-sm text-[var(--text-secondary)]">분석 연도</dt>
         <dd className="m-0 text-sm text-[var(--text-primary)]">
-          {stats.years.length}개년 ({stats.years[0]}–{stats.years[stats.years.length - 1]})
+          {/* **문서에 실제로 들어간 해**를 적는다. 고른 연도를 그대로 쓰면
+              두 가지가 거짓이 된다 — 대상 대학에 없는 해가 포함되고
+              (제주국제대 2026), 비연속 선택이 "3개년 (2016–2026)" 처럼
+              11년치를 담은 것처럼 읽힌다. */}
+          {reportYears.length}개년 ({reportYears.join(', ')})
         </dd>
 
         <dt className="text-sm text-[var(--text-secondary)]">비교군</dt>

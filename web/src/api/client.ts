@@ -224,6 +224,14 @@ export function chartUrl(
     region?: string | null
     compareGroup?: readonly string[] | null
     years?: readonly number[] | null
+    /**
+     * 데이터 판(`stats.dataVersion`).
+     *
+     * 서버는 쓰지 않는다 — **브라우저 캐시를 깨기 위한 것**이다. 응답에
+     * `max-age=300` 이 붙어 있어서, 전처리로 데이터를 갈아끼워도 주소가
+     * 같으면 브라우저가 서버에 묻지 않고 옛 PNG 를 5분간 계속 쓴다.
+     */
+    dataVersion?: number | null
   },
 ): string {
   const q = new URLSearchParams({
@@ -233,5 +241,6 @@ export function chartUrl(
   if (params.region) q.set('region', params.region)
   for (const name of params.compareGroup ?? []) q.append('compareGroup', name)
   for (const year of params.years ?? []) q.append('years', String(year))
+  if (params.dataVersion != null) q.set('v', String(params.dataVersion))
   return `/api/chart/${kind}.png?${q.toString()}`
 }

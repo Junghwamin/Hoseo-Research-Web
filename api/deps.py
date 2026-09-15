@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from functools import lru_cache
 
 import pandas as pd
@@ -48,9 +49,46 @@ def get_frames() -> tuple[pd.DataFrame, pd.DataFrame]:
     return _load()
 
 
+#: 데이터가 교체된 횟수. 프레임을 새로 읽을 때마다 오른다.
+#:
+#: 응답에 실어 보내 **브라우저 캐시를 무효화**하는 데 쓴다. 차트 주소는
+#: 대상·연도·비교군이 같으면 글자 하나 안 바뀌는데, 응답에
+#: `Cache-Control: max-age=300` 이 붙어 있어 전처리 뒤에도 브라우저가 서버에
+#: 묻지 않고 옛 PNG 를 5분간 그대로 쓴다.
+_data_version = 0
+
+#: 데이터가 바뀌면 함께 버려야 하는 캐시들.
+#:
+#: `deps` 가 `routers` 를 import 하면 의존 방향이 거꾸로 선다. 반대로 캐시를
+#: 가진 쪽이 여기에 등록하게 하면, `reset_cache()` 한 번으로 전부 비워지면서
+#: 방향도 지켜진다.
+_reset_hooks: list[Callable[[], None]] = []
+
+
+def data_version() -> int:
+    return _data_version
+
+
+def on_reset(fn: Callable[[], None]) -> Callable[[], None]:
+    """데이터 교체 시 함께 비울 캐시를 등록한다. 데코레이터로 쓴다."""
+    _reset_hooks.append(fn)
+    return fn
+
+
 def reset_cache() -> None:
-    """전처리로 CSV 가 새로 쓰이면 캐시를 버린다."""
+    """전처리로 CSV 가 새로 쓰이면 캐시를 버린다.
+
+    **프레임 캐시만 비우면 모자란다.** `/api/preprocess` 가 생기기 전에는
+    데이터 교체가 서버 재시작뿐이었고, 재시작은 파생 캐시까지 전부 날렸다.
+    재시작 없이 바뀔 수 있게 된 순간, 프레임에서 파생된 캐시(차트 PNG)가
+    옛 데이터를 들고 살아남는다 — 화면 그림과 Word 그림이 갈라진다.
+    """
+    global _data_version
+
     _load.cache_clear()
+    _data_version += 1
+    for hook in _reset_hooks:
+        hook()
 
 
 def resolve_years(
@@ -247,7 +285,9 @@ __all__ = [
     "COMPARE_FALLBACK_SIZE",
     "MAX_REQUESTED_COMPARE",
     "UNIVERSITY",
+    "data_version",
     "get_frames",
+    "on_reset",
     "require_university",
     "require_year",
     "reset_cache",

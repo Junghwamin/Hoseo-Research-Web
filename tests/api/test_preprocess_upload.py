@@ -31,7 +31,16 @@ from fastapi.testclient import TestClient
 
 from api.main import app
 from api import deps
+from api.routers import report
 from tests.conftest import RAW_AVAILABLE, RAW_DIR
+
+# `report` 를 **모듈 레벨에서** 가져오는 것이 중요하다.
+#
+# `test_openapi_drift.py` 는 `sys.modules` 에서 `api*` 를 통째로 지우고 다시
+# import 한다(프론트 빌드 유무에 따라 스키마가 달라지는지 보려고). 그래서 테스트
+# 함수 안에서 import 하면 **app 이 쓰는 것과 다른 세대의 모듈**을 집어 온다 —
+# `_CHART_CACHE` 도 `_reset_hooks` 도 각자 따로 있는 상태가 된다.
+# 수집 시점에 한 번 묶어 두면 `app`·`deps`·`report` 가 같은 세대로 맞춰진다.
 
 rawdata = pytest.mark.skipif(not RAW_AVAILABLE, reason="Raw data/*.xlsx 가 없다")
 
@@ -127,6 +136,45 @@ class TestIngest:
         backup = workspace / "output" / second["backupPath"]
         assert (backup / "전체_대학_데이터.csv").exists()
 
+    def test_전처리하면_차트_캐시도_버린다(self, client, workspace):
+        """프레임 캐시만 비우면 화면 그림과 Word 그림이 갈라진다.
+
+        `/api/report` 는 캐시를 거치지 않고 차트를 직접 그리는데
+        `/api/chart` 는 캐시 히트라 옛 PNG 를 준다. 키에 데이터 판이 없어서
+        생기는 일이고, **전처리로 재시작 없이 데이터를 바꿀 수 있게 되면서
+        비로소 도달 가능해졌다** — 그 전에는 데이터 교체가 서버 재시작뿐이라
+        재시작이 파생 캐시까지 전부 날렸다.
+        """
+        from io import BytesIO
+
+        # 진짜 차트를 그려 캐시를 채우지 않는다. matplotlib 이 도는지·그 해에
+        # 그 대학이 있는지에 결과가 달려 버리면, 정작 재고 싶은 것(**전처리가
+        # 파생 캐시를 버리는가**)이 다른 이유로 흔들린다. 표식을 직접 넣는다.
+        sentinel = {"rank": BytesIO(b"old-png")}
+        report._CHART_CACHE[("표식", 2026, "충청권", (), ())] = sentinel
+        assert len(report._CHART_CACHE) > 0
+
+        newcomer = _raw_files(3)[0]
+        _upload(client, unicodedata.normalize("NFC", newcomer.name), newcomer.read_bytes())
+
+        assert len(report._CHART_CACHE) == 0, (
+            "전처리 후에도 차트 캐시가 남아 있다 — 화면은 옛 그림, Word 는 새 그림이 된다"
+        )
+
+    def test_차트_캐시가_deps_에_등록되어_있다(self, client, workspace):
+        # 위 테스트는 `clear()` 가 동작한다는 것만으로도 통과할 수 있다.
+        # 훅이 실제로 걸려 있는지는 따로 못박는다 — 등록을 빠뜨리면
+        # `reset_cache()` 를 부르는 **다른 경로**가 생겼을 때 조용히 새어나간다.
+        assert report._drop_chart_cache in deps._reset_hooks
+
+    def test_전처리하면_데이터_판이_오른다(self, client, workspace):
+        # 브라우저 캐시를 깨는 토큰이다. 안 오르면 주소가 그대로라 브라우저가
+        # 서버에 묻지도 않고 옛 PNG 를 계속 쓴다.
+        before = deps.data_version()
+        newcomer = _raw_files(3)[0]
+        _upload(client, unicodedata.normalize("NFC", newcomer.name), newcomer.read_bytes())
+        assert deps.data_version() > before
+
     def test_전처리_후_캐시가_새_데이터를_본다(self, client, workspace):
         """`reset_cache` 를 안 부르면 화면이 옛 숫자를 계속 본다.
 
@@ -148,6 +196,14 @@ class TestIngest:
 
 @rawdata
 class TestValidation:
+    def test_대문자_확장자는_소문자로_저장한다(self, client, workspace):
+        # `scan_raw_files` 가 `glob("*.xlsx")` 로 찾으므로 `.XLSX` 로 저장하면
+        # **저장은 되는데 전처리가 건너뛴다** — "올렸는데 아무 일도 안
+        # 일어났다" 가 된다.
+        from api import preprocess_service as svc
+
+        assert svc.safe_name("2026년_자료.XLSX") == "2026년_자료.xlsx"
+
     def test_xlsx_가_아니면_400(self, client, workspace):
         r = _upload(client, "2026년_자료.csv", b"not excel")
         assert r.status_code == 400

@@ -35,9 +35,14 @@ export function DataUpdatePanel({ onUpdated, onClose }: DataUpdatePanelProps) {
   const [result, setResult] = useState<PreprocessResponse | null>(null)
 
   // 서버도 막지만, 올린 뒤에 듣는 것보다 고를 때 아는 편이 낫다.
-  const rejected = picked.filter(
-    (f) => !f.name.toLowerCase().endsWith('.xlsx') || !YEAR_IN_NAME.test(f.name),
-  )
+  //
+  // **NFC 정규화를 빼면 안 된다.** macOS 는 파일명을 NFD 로 보내서 '년' 이
+  // 자모로 분해된다. 서버(`safe_name`)와 코어(`scan_raw_files`)는 정규화하는데
+  // 화면만 안 하면, 서버가 받아 줄 파일을 화면이 "연도가 없다" 며 막는다.
+  const rejected = picked.filter((f) => {
+    const name = f.name.normalize('NFC')
+    return !name.toLowerCase().endsWith('.xlsx') || !YEAR_IN_NAME.test(name)
+  })
   const canSend = picked.length > 0 && rejected.length === 0 && !busy
 
   function choose(files: FileList | null) {

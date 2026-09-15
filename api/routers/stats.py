@@ -72,6 +72,7 @@ def post_stats(req: schemas.StatsRequest) -> schemas.StatsResponse:
         compareGroup=scope.compare_group,
         compareGroupNote=scope.compare_note,
         years=scope.years,
+        dataVersion=deps.data_version(),
         trend={
             y: schemas.TrendPoint(**schemas.translate(v, schemas.TREND_KEYS))
             for y, v in stats["trend"].items()
