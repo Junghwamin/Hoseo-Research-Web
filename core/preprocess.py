@@ -848,13 +848,38 @@ def process_in_memory(
 # ---------------------------------------------------------------------------
 # 12. 메인 함수
 # ---------------------------------------------------------------------------
-def main():
-    project_root = Path(__file__).resolve().parent.parent   # core/ 의 부모 = 프로젝트 루트
-    config_dir = project_root / "config"  # config JSON은 코드와 함께 번들에 포함 (read-only OK)
-    raw_dir = Path.cwd() / "Raw data"     # CWD 기준 (쓰기 가능)
-    output_dir = Path.cwd() / "output"    # CWD 기준 (쓰기 가능)
+class PreprocessError(RuntimeError):
+    """전처리를 진행할 수 없는 상태.
 
-    output_dir.mkdir(exist_ok=True)
+    메시지는 **사용자에게 그대로 보여줄 수 있는 문장**으로 쓴다. CLI 는 찍고
+    API 는 400 으로 올려보내는데, 양쪽이 각자 문구를 지어내면 같은 상황을
+    다르게 설명하게 된다.
+    """
+
+
+def run_pipeline(
+    raw_dir: Path, output_dir: Path, config_dir: Path | None = None
+) -> dict:
+    """Raw xlsx 폴더 전체를 읽어 output_dir 에 결과를 쓴다.
+
+    **폴더 전체를 다시 계산한다.** 새로 올라온 파일만 처리하면 안 되는데,
+    순위가 그 해의 전체 대학을 놓고 매겨지기 때문이다 — 2026년 파일 하나만
+    돌려 내보내면 CSV 에 2026년만 남아 나머지 연도가 통째로 사라진다.
+
+    `main()` 과 같은 코드다. CLI 는 이 함수를 부르는 얇은 껍데기다.
+
+    Returns:
+        처리 요약. 호출자가 사용자에게 보여주는 데 필요한 것만 담는다.
+
+    Raises:
+        PreprocessError: Raw 폴더가 없거나, 연도를 읽을 수 있는 파일이 없을 때.
+    """
+    if config_dir is None:
+        # core/ 의 부모 = 프로젝트 루트. config JSON 은 코드와 함께 번들에
+        # 들어가므로 읽기 전용이어도 된다.
+        config_dir = Path(__file__).resolve().parent.parent / "config"
+
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     print("=" * 60)
     print("  전임교원 연구실적 전처리 도구")
@@ -870,17 +895,17 @@ def main():
     # --- 파일 스캔 ---
     print(f"\n[2/5] Raw 데이터 파일 스캔 중... (경로: {raw_dir})")
     if not raw_dir.exists():
-        print(f"  [오류] Raw data 폴더가 존재하지 않습니다: {raw_dir}")
-        return
+        raise PreprocessError(f"Raw data 폴더가 존재하지 않습니다: {raw_dir}")
     all_xlsx = list(raw_dir.glob("*.xlsx"))
     print(f"  발견된 xlsx 파일: {len(all_xlsx)}개")
     for f in all_xlsx:
         print(f"    - {f.name}")
     year_files = scan_raw_files(raw_dir)
     if not year_files:
-        print("  [오류] 파일명에서 연도를 찾을 수 없습니다.")
-        print("  파일명에 '2024년' 또는 '2024_' 형태의 연도가 포함되어야 합니다.")
-        return
+        raise PreprocessError(
+            "파일명에서 연도를 찾을 수 없습니다. "
+            "파일명에 '2024년' 또는 '2024_' 형태의 연도가 포함되어야 합니다."
+        )
     for year, fpath in year_files.items():
         print(f"  {year}년: {fpath.name}")
 
@@ -980,6 +1005,23 @@ def main():
     print(f"    - {output_dir / '권역별_순위.csv'}")
     print(f"    - {output_dir / '충청권_순위.csv'} (하위 호환)")
     print("=" * 60)
+
+    return {
+        "years": sorted(year_data.keys()),
+        "universities": len(total_unis),
+        "nationalRows": sum(len(ndf) for _, ndf in all_national),
+        "regionalRows": sum(len(rdf) for _, rdf in all_region),
+        "sourceFiles": [f.name for f in year_files.values()],
+    }
+
+
+def main():
+    """CLI 진입점. 경로는 CWD 기준이라 설치본에서도 쓰기 가능한 곳을 가리킨다."""
+    try:
+        run_pipeline(Path.cwd() / "Raw data", Path.cwd() / "output")
+    except PreprocessError as e:
+        print(f"  [오류] {e}")
+        return
 
 
 if __name__ == "__main__":
