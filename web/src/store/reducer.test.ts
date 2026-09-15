@@ -17,6 +17,7 @@ const stats = (university: string, year: number) =>
     regionName: '충청권',
     compareGroup: [university],
     compareGroupNote: null,
+    years: [2025, 2026],
     trend: {},
     averages: {},
     rankChanges: {},
@@ -298,7 +299,56 @@ describe('권역·비교군 입력', () => {
     expect(after.maxStep).toBe(1)
   })
 
-  it('리셋하면 권역·비교군 선택도 사라진다', () => {
+  it('고른 분석 연도를 그대로 들고 있는다', () => {
+    const s = reducer(INITIAL_STATE, {
+      type: 'selectTarget',
+      university: '호서대학교',
+      year: 2026,
+      years: [2024, 2025, 2026],
+    })
+    expect(s.years).toEqual([2024, 2025, 2026])
+  })
+
+  it('연도를 고르지 않으면 null 이다', () => {
+    const s = reducer(INITIAL_STATE, {
+      type: 'selectTarget',
+      university: '호서대학교',
+      year: 2026,
+    })
+    expect(s.years).toBeNull()
+  })
+
+  it('서버가 확정한 연도로 갱신된다', () => {
+    // 비교군과 같은 이유다. 고르지 않으면 서버가 전 연도로 채우는데, 그 값을
+    // 화면이 모르면 **차트 요청만 연도 없이 나간다.**
+    let s = reducer(INITIAL_STATE, {
+      type: 'selectTarget',
+      university: '호서대학교',
+      year: 2026,
+    })
+    s = reducer(s, { type: 'loadSuccess', stats: stats('호서대학교', 2026) })
+    expect(s.years).toEqual([2025, 2026])
+  })
+
+  it('연도만 바꿔도 이전 분석 결과와 서술을 버린다', () => {
+    const before = loadedAtStep4()
+    expect(before.narratives.trend).not.toBe('')
+
+    const after = reducer(before, {
+      type: 'selectTarget',
+      university: before.university!,
+      year: before.year!,
+      years: [2025, 2026],
+    })
+
+    // 연도가 바뀌면 추이·평균·순위가 전부 달라진다. "11개년 동안 꾸준히
+    // 올랐다" 는 글을 2개년 분석에 붙여 두면 그대로 보고서에 실린다.
+    expect(after.stats).toBeNull()
+    expect(after.narratives.trend).toBe('')
+    expect(after.step).toBe(1)
+  })
+
+  it('리셋하면 권역·비교군·연도 선택이 사라진다', () => {
     let s = reducer(INITIAL_STATE, {
       type: 'selectTarget',
       university: '단국대학교',
@@ -309,6 +359,7 @@ describe('권역·비교군 입력', () => {
     s = reducer(s, { type: 'reset' })
     expect(s.regionChoice).toBeNull()
     expect(s.compareGroup).toBeNull()
+    expect(s.years).toBeNull()
   })
 })
 

@@ -53,6 +53,42 @@ def reset_cache() -> None:
     _load.cache_clear()
 
 
+def resolve_years(
+    national_df: pd.DataFrame, year: int, requested: list[int] | None
+) -> list[int]:
+    """분석 연도를 확정한다. 생략하면 데이터에 있는 전 연도.
+
+    원본 Streamlit 판의 「분석 연도 선택」 multiselect 가 하던 일이다. 이관에서
+    빠지면서 추이·평균·순위가 **언제나 11개년 전부**로 그려졌다 — 최근 3년만
+    보고 싶어도 방법이 없었다.
+
+    기준 연도가 선택 밖이면 422 로 막는다. 그대로 통과시키면 비교표와 YoY 는
+    기준 연도로 계산되는데 추이 차트에는 그 해가 없어, 같은 화면의 두 그림이
+    서로 다른 해를 말하게 된다.
+    """
+    available = dl.get_available_years(national_df)
+    if not requested:
+        return available
+
+    unknown = sorted({y for y in requested if y not in set(available)})
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail=f"데이터에 없는 연도다: {unknown}. 가능: {available}",
+        )
+
+    years = sorted(set(requested))
+    if year not in years:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"기준 연도 {year} 는 분석 연도 안에 있어야 한다. "
+                f"고른 연도: {years}"
+            ),
+        )
+    return years
+
+
 def resolve_region(university: str, regional_df: pd.DataFrame, requested: str | None) -> str:
     """대상 대학의 권역을 **반드시 하나로** 확정한다.
 
@@ -217,4 +253,5 @@ __all__ = [
     "reset_cache",
     "resolve_compare_group",
     "resolve_region",
+    "resolve_years",
 ]

@@ -90,9 +90,11 @@ Hoseo-Research-Web/
 │
 ├── api/                        ← FastAPI. core/ 를 감싸기만 한다
 │   ├── main.py                 ← 진입점 + web/dist 정적 서빙
-│   ├── deps.py                 ← 모집단 판정(권역·비교군)
+│   ├── deps.py                 ← 모집단 판정(권역·비교군·분석 연도)
+│   ├── analysis.py             ← 판정 + 통계 수집. 네 엔드포인트가 여기만 쓴다
+│   ├── preprocess_service.py   ← 업로드 저장·전처리·교체(백업·롤백 포함)
 │   ├── schemas.py              ← 응답 계약. 한글 키 → 영문 키 번역
-│   └── routers/                ← stats, report, settings
+│   └── routers/                ← stats, report, settings, data
 │
 ├── web/                        ← React + TypeScript + Vite
 │   ├── src/
@@ -150,11 +152,43 @@ Hoseo-Research-Web/
 | `GET` | `/api/chart/{kind}.png` | 차트 이미지. **Word 에 들어가는 것과 같은 PNG** |
 | `POST` | `/api/narrative` | GPT 서술 (`keys` 로 절 지정 가능. 일부 실패해도 나머지 반환) |
 | `POST` | `/api/report` | Word 파일 (메모리 생성, 디스크에 남기지 않음) |
+| `POST` | `/api/preprocess` | Raw xlsx 업로드 → 전처리 → 데이터 교체 (multipart) |
 | `GET` | `/api/settings` | API 키 설정 여부·출처·마스킹 힌트. **키 값은 절대 내려가지 않는다** |
 | `POST` | `/api/settings/api-key` | API 키 저장 (`.env` 기록 + 프로세스 즉시 반영) |
 
-`{kind}` 는 `trend`·`bar`·`avg`·`rank`·`compare` 다. 요청할 때 `compareGroup`
-을 함께 보내야 한다 — 빼면 서버 기본 비교군으로 그려져 보고서와 그림이 갈라진다.
+`{kind}` 는 `trend`·`bar`·`avg`·`rank`·`compare` 다.
+
+**그림을 결정하는 입력은 하나도 빠뜨리지 않는다.** `compareGroup` 과 `years`
+를 함께 보내야 한다 — 빼면 서버가 기본 비교군·전 연도로 그리는데, 보고서는
+사용자가 고른 것으로 만들어져 화면과 문서의 그림이 갈라진다. 화면에서는
+`chartUrl()` 을 거쳐 주소를 만들면 빠뜨릴 수 없다.
+
+### 분석 연도 (`years`)
+
+`/api/stats`·`/api/narrative`·`/api/report`·`/api/chart` 가 모두 받는다.
+추이·평균·순위에 남길 해를 정한다. 생략하면 전 연도다.
+
+- **기준 연도(`year`)가 반드시 포함되어야 한다.** 아니면 422 — 비교표와
+  전년대비는 기준 연도로 계산되는데 추이 차트에 그 해가 없으면, 같은 화면의
+  두 그림이 서로 다른 해를 말하게 된다.
+- **「전년대비」는 언제나 바로 앞 해다.** 분석 연도에서 앞 해를 빼도 증감의
+  뜻은 바뀌지 않는다. 순위 변화는 전 연도로 계산한 뒤 고를 해만 남긴다 —
+  프레임을 걸러서 계산하면 2020·2026만 고른 사용자에게 6년 간격을
+  "전년대비" 라고 표시하게 된다.
+
+### 데이터 갱신 (`POST /api/preprocess`)
+
+상단바의 「데이터 갱신」 에서 대학알리미 공시 xlsx 를 올리면 데이터를 다시
+만든다. 파일명에 `2026년` 또는 `2026_` 처럼 연도가 있어야 한다.
+
+- **`Raw data/` 폴더 전체를 다시 계산한다.** 올린 파일만 처리하면 CSV 에 그
+  연도만 남아 나머지가 사라진다 — 순위가 그 해 전체 대학을 놓고 매겨지는
+  값이라 부분 계산이 성립하지 않는다.
+- **실패하면 아무것도 바뀌지 않는다.** 임시 폴더에 쓰고 끝까지 성공했을 때만
+  `output/` 에 반영한다. 업로드한 파일도 되돌린다 — 남겨 두면 다음 번 성공한
+  실행이 그 잘못된 파일을 집어 든다.
+- **덮어쓰기 직전 내용을 백업한다** (`output/.backup-<시각>/`, 최근 3개 유지).
+- 쓰기 권한이 없는 배포에서는 `web/src/features.ts` 의 `dataUpdate` 를 끈다.
 
 서버 실행 후 http://127.0.0.1:8000/docs 에서 직접 호출해 볼 수 있다.
 
@@ -222,7 +256,8 @@ python scripts/verify_built_bundle.py     # 빌드된 번들을 실제로 띄워
 | GPT 서술이 503 | `OPENAI_API_KEY` 를 **평면 키**로 설정. `[openai]` 테이블 형식은 인식되지 않는다 |
 | `.env` 를 넣었는데 안 읽힌다 | 프로젝트 루트에 있는지 확인. 환경변수가 이미 설정돼 있으면 그쪽이 우선이다 |
 | 히어로 배경이 비어 있다 | `python scripts/fetch_media.py` 를 실행했는지 확인 (CDN 을 쓰지 않는다) |
-| 3단계 차트가 화면과 문서에서 다르다 | 차트 요청에 `compareGroup` 이 빠졌다. `chartUrl()` 을 거쳐 만든다 |
+| 3단계 차트가 화면과 문서에서 다르다 | 차트 요청에 `compareGroup`·`years` 가 빠졌다. `chartUrl()` 을 거쳐 만든다 |
+| 연도를 골랐는데 422 가 난다 | 기준 연도가 분석 연도 밖이다. 화면은 기준 연도를 따라 옮겨 준다 |
 | 한글 폰트 깨짐 (차트) | Windows 는 맑은 고딕, Linux 는 `fonts-nanum` 설치 |
 | CSV 한글 깨짐 | `encoding="utf-8-sig"` 사용 |
 | 컬럼 탐지 실패 | 구형 포맷은 자동 폴백. 그래도 실패하면 `find_columns()` 키워드 조정 |

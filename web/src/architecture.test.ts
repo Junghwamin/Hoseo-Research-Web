@@ -118,6 +118,11 @@ describe('마법사 단계', () => {
     ).toEqual([])
   })
 
+  // 이 파일의 다른 검사는 소스를 읽기만 하는데 이것만 **실제로 import** 한다.
+  // registry 가 단계 5개를 끌어오고 그 아래로 recharts·컴포넌트가 전부 딸려
+  // 오므로, 다른 파일과 나란히 도는 전체 실행에서는 기본 5초를 넘긴다
+  // (단독 실행 1.5초, 병렬 실행 9초를 봤다). 넉넉히 준다 — 여기서 재는 것은
+  // 속도가 아니라 구조다.
   it('단계를 늘리려면 registry 한 곳만 고치면 된다', async () => {
     // 진행 표시·이동 버튼·잠금 규칙이 전부 이 배열에서 파생되는지 확인한다.
     const { STEP_REGISTRY } = await import('./features/wizard/steps/registry')
@@ -129,5 +134,5 @@ describe('마법사 단계', () => {
       expect(step.title).toBe(STEPS[i])
       expect(typeof step.Component).toBe('function')
     })
-  })
+  }, 30_000)
 })

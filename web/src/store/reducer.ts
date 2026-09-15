@@ -16,6 +16,7 @@ export const INITIAL_STATE: WizardState = {
   year: null,
   regionChoice: null,
   compareGroup: null,
+  years: null,
   regionName: null,
   stats: null,
   narratives: emptyNarratives(),
@@ -86,6 +87,7 @@ export function reducer(state: WizardState, action: WizardAction): WizardState {
         year: action.year,
         regionChoice: action.regionChoice ?? null,
         compareGroup: action.compareGroup ?? null,
+        years: action.years ?? null,
       }
     }
 
@@ -105,6 +107,9 @@ export function reducer(state: WizardState, action: WizardAction): WizardState {
         // 기본 비교군이 들어오는데, 이걸 반영하지 않으면 **차트 요청만
         // 비교군 없이 나가** 화면과 보고서의 그림이 갈라진다.
         compareGroup: action.stats.compareGroup,
+        // 분석 연도도 같은 이유로 서버가 쓴 값으로 맞춘다. 고르지 않았으면
+        // 전 연도가 들어온다.
+        years: action.stats.years,
       }
 
     case 'loadFailure':

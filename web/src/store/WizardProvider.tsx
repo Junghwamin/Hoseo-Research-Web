@@ -19,6 +19,8 @@ export interface AnalysisInput {
   readonly regionChoice?: string | null
   /** 고른 비교군. `null` 이면 서버 기본 비교군. */
   readonly compareGroup?: readonly string[] | null
+  /** 고른 분석 연도. `null` 이면 전 연도. */
+  readonly years?: readonly number[] | null
 }
 
 interface WizardApi {
@@ -37,11 +39,24 @@ export function WizardProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE)
 
   const loadTarget = useCallback(async (input: AnalysisInput) => {
-    const { university, year, regionChoice = null, compareGroup = null } = input
+    const {
+      university,
+      year,
+      regionChoice = null,
+      compareGroup = null,
+      years = null,
+    } = input
 
     // selectTarget 이 먼저 파생 상태를 지운다. 순서를 바꾸면 요청이 실패했을 때
     // 이전 분석 결과가 그대로 남아 새 대상의 것처럼 보인다(V17).
-    dispatch({ type: 'selectTarget', university, year, regionChoice, compareGroup })
+    dispatch({
+      type: 'selectTarget',
+      university,
+      year,
+      regionChoice,
+      compareGroup,
+      years,
+    })
     dispatch({ type: 'loadStart' })
     try {
       const stats = await api.stats({
@@ -51,6 +66,8 @@ export function WizardProvider({ children }: { children: ReactNode }) {
         // 빈 배열을 보내면 서버가 기본 비교군으로 되돌린다. "아무도 안 고름" 을
         // 표현할 방법이 없으므로, 비었으면 아예 보내지 않는다.
         compareGroup: compareGroup && compareGroup.length > 0 ? [...compareGroup] : null,
+        // 연도도 같다 — 빈 배열은 전 연도와 같은 뜻이므로 보내지 않는다.
+        years: years && years.length > 0 ? [...years] : null,
       })
       dispatch({ type: 'loadSuccess', stats })
     } catch (e) {

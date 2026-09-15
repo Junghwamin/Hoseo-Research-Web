@@ -25,6 +25,7 @@ export type ReportRequest = S['ReportRequest']
 export type UniversityRow = S['UniversityRow']
 export type UniversitiesResponse = S['UniversitiesResponse']
 export type SettingsResponse = S['SettingsResponse']
+export type PreprocessResponse = S['PreprocessResponse']
 export type ApiKeyRequest = S['ApiKeyRequest']
 
 /** 서버가 그려 주는 차트 5종. Word 보고서에 들어가는 것과 같은 그림이다. */
@@ -111,6 +112,31 @@ export const api = {
       body: JSON.stringify({ apiKey } satisfies ApiKeyRequest),
     }),
 
+  /**
+   * Raw Excel 을 올려 데이터를 다시 만든다.
+   *
+   * JSON 이 아니라 multipart 라 `request` 를 쓰지 않는다 — `Content-Type` 을
+   * 직접 정하면 브라우저가 붙이는 `boundary` 가 빠져 서버가 파싱하지 못한다.
+   * FormData 를 주고 헤더는 건드리지 않는 것이 유일하게 맞는 방법이다.
+   */
+  preprocess: async (files: readonly File[]): Promise<PreprocessResponse> => {
+    const form = new FormData()
+    for (const file of files) form.append('files', file)
+
+    const res = await fetch('/api/preprocess', { method: 'POST', body: form })
+    if (!res.ok) {
+      let detail = `${res.status} ${res.statusText}`
+      try {
+        const body = await res.json()
+        if (typeof body?.detail === 'string') detail = body.detail
+      } catch {
+        /* 본문이 JSON 이 아니면 상태줄을 쓴다 */
+      }
+      throw new ApiError(res.status, detail)
+    }
+    return res.json() as Promise<PreprocessResponse>
+  },
+
   stats: (body: StatsRequest) =>
     request<StatsResponse>('/api/stats', {
       method: 'POST',
@@ -186,8 +212,9 @@ export function byYear<T>(map: Record<string, T>): Array<{ year: number } & T> {
  * `<img src>` 로 쓴다 — fetch 로 받아 objectURL 을 만들면 브라우저 캐시를
  * 우회하게 되고, 단계를 오갈 때마다 matplotlib 이 다시 돈다.
  *
- * `compareGroup` 을 반드시 함께 보낸다. 빼면 서버가 기본 비교군으로 그리는데,
- * 사용자가 고른 비교군으로 만들어지는 **Word 보고서와 그림이 달라진다.**
+ * `compareGroup` 과 `years` 를 반드시 함께 보낸다. 빼면 서버가 기본 비교군·전
+ * 연도로 그리는데, 사용자가 고른 것으로 만들어지는 **Word 보고서와 그림이
+ * 달라진다.** 그림을 결정하는 입력은 하나도 빠뜨리지 않는다.
  */
 export function chartUrl(
   kind: ChartKind,
@@ -196,6 +223,7 @@ export function chartUrl(
     year: number
     region?: string | null
     compareGroup?: readonly string[] | null
+    years?: readonly number[] | null
   },
 ): string {
   const q = new URLSearchParams({
@@ -204,5 +232,6 @@ export function chartUrl(
   })
   if (params.region) q.set('region', params.region)
   for (const name of params.compareGroup ?? []) q.append('compareGroup', name)
+  for (const year of params.years ?? []) q.append('years', String(year))
   return `/api/chart/${kind}.png?${q.toString()}`
 }

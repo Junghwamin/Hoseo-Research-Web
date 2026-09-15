@@ -10,6 +10,7 @@ const base = {
   year: 2026,
   regionName: '충청권',
   compareGroup: ['순천향대학교', '단국대학교'],
+  years: [2024, 2025, 2026],
 }
 
 describe('ChartGallery', () => {
@@ -28,6 +29,21 @@ describe('ChartGallery', () => {
     const params = new URLSearchParams(src.split('?')[1])
     expect(params.getAll('compareGroup')).toEqual(['순천향대학교', '단국대학교'])
     expect(params.get('region')).toBe('충청권')
+  })
+
+  it('분석 연도도 주소에 실어 보낸다', () => {
+    // 비교군과 같은 이유다. 빠지면 서버가 전 연도로 그리는데, 보고서는
+    // 고른 연도로 만들어진다 — 화면엔 3개년, 문서엔 11개년이 실린다.
+    render(<ChartGallery {...base} kinds={['rank']} />)
+    const src = screen.getByRole('img').getAttribute('src')!
+    const params = new URLSearchParams(src.split('?')[1])
+    expect(params.getAll('years')).toEqual(['2024', '2025', '2026'])
+  })
+
+  it('연도가 null 이면 주소에도 없다', () => {
+    render(<ChartGallery {...base} years={null} kinds={['rank']} />)
+    const src = screen.getByRole('img').getAttribute('src')!
+    expect(new URLSearchParams(src.split('?')[1]).getAll('years')).toEqual([])
   })
 
   it('비교군이 null 이면 주소에도 없다', () => {

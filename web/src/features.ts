@@ -22,6 +22,14 @@ export const FEATURES = {
    * 없는 죽은 코드였다. API 키 관리가 들어 있으므로 되살린다.
    */
   settings: true,
+
+  /**
+   * 데이터 갱신 — Raw Excel 업로드 → 전처리.
+   *
+   * 원본에는 있었고(`research.py:885`) 이관에서 엔드포인트째 빠졌다.
+   * 쓰기 권한이 없는 배포(읽기 전용 컨테이너)에서는 꺼야 한다.
+   */
+  dataUpdate: true,
 } as const
 
 export type FeatureKey = keyof typeof FEATURES

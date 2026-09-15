@@ -102,7 +102,9 @@ export function Step2Metrics({ state }: StepProps) {
 
       <Card
         eyebrow="연도별 상세"
-        title="10개년 수치"
+        // 개수를 박아 두면 연도를 고른 순간 제목이 거짓이 된다. 새 연도가
+        // 들어와도 마찬가지다 — 데이터가 자라는 것은 정상 운영이다.
+        title={`${stats.years.length}개년 수치`}
         description="보고서에 실리는 숫자다. 차트로는 소수 넷째 자리를 구분할 수 없다."
         bodyClassName="p-0"
       >

@@ -23,6 +23,21 @@ async function pickUniversity(page: Page, name: string) {
   await expect(input).toHaveValue(name)
 }
 
+/**
+ * 서버에 GPT 키가 설정돼 있는가.
+ *
+ * 아래 두 테스트는 **키가 없는 상태의 계약**을 잠근다. CI 에는 `.env` 가
+ * 없어 늘 성립하지만, 개발 머신에는 진짜 키가 있어 성립하지 않는다. 그걸
+ * 모른 채 두면 두 가지가 생긴다 — 로컬에서만 빨갛게 실패하거나, 더 나쁘게는
+ * **버튼을 눌러 진짜 OpenAI 호출이 나간다**(요금과 대기 시간이 붙는다).
+ *
+ * 전제를 코드로 적어 두고 성립하지 않으면 이유와 함께 건너뛴다.
+ */
+async function apiKeyConfigured(page: Page): Promise<boolean> {
+  const res = await page.request.get('/api/settings')
+  return (await res.json()).apiKeyConfigured === true
+}
+
 /** 1단계에서 데이터를 불러오고 2단계까지 간다. */
 async function loadAndAdvance(page: Page, university = '호서대학교') {
   await page.goto('/')
@@ -69,7 +84,9 @@ test('비교군을 직접 고르면 분석에 반영된다', async ({ page }) =>
   const picker = page.getByLabel('비교군 후보 검색')
   await expect(picker).toBeVisible()
 
-  const boxes = page.getByRole('checkbox')
+  // 연도 칩도 role=checkbox 다. 전역 선택자를 쓰면 2016년을 누르게 된다 —
+  // 후보 목록 안으로 좁혀야 무엇을 누르는지가 분명하다.
+  const boxes = page.getByTestId('compare-candidates').getByRole('checkbox')
   await boxes.nth(0).check()
   await boxes.nth(1).check()
   await expect(page.getByTestId('compare-picker-summary')).toContainText('2개교 선택')
@@ -86,8 +103,9 @@ test('1단계로 돌아와도 고른 비교군이 남아 있다', async ({ page 
   // 기본 비교군으로 바뀐다.
   await page.goto('/')
   await pickUniversity(page, '호서대학교')
-  await page.getByRole('checkbox').nth(0).check()
-  await page.getByRole('checkbox').nth(1).check()
+  const candidates = page.getByTestId('compare-candidates').getByRole('checkbox')
+  await candidates.nth(0).check()
+  await candidates.nth(1).check()
   await page.getByTestId('load-button').click()
   await expect(page.getByTestId('load-summary')).toContainText('비교군 3개교')
 
@@ -116,7 +134,7 @@ test('비교군을 바꾸면 이전 분석이 남지 않는다', async ({ page }
   // 전부 지우고 하나만 고른다
   await page.getByRole('button', { name: '기본 비교군으로' }).click()
   await expect(page.getByTestId('compare-picker-summary')).toContainText('기본 비교군')
-  await page.getByRole('checkbox').first().check()
+  await page.getByTestId('compare-candidates').getByRole('checkbox').first().check()
   await page.getByTestId('load-button').click()
 
   // **1개교만 골라도 바꿔치지 않는다.** 예전에는 서버의 "너무 적으면 채운다"
@@ -124,6 +142,61 @@ test('비교군을 바꾸면 이전 분석이 남지 않는다', async ({ page }
   // 권역 상위 5개교가 실렸다.
   await expect(page.getByTestId('compare-picker-summary')).toContainText('1개교 선택')
   await expect(page.getByTestId('load-summary')).toContainText('비교군 2개교')
+})
+
+test('분석 연도를 골라 원하는 해만 본다', async ({ page }) => {
+  // 이관에서 통째로 빠져 있던 기능이다. 없으면 추이·평균·순위가 언제나
+  // 전 연도로 그려져, 최근 몇 년만 보는 방법이 없다.
+  await page.goto('/')
+  await pickUniversity(page, '호서대학교')
+
+  const picker = page.getByTestId('year-picker')
+  await expect(picker).toBeVisible()
+
+  await page.getByRole('button', { name: '최근 3년' }).click()
+  await expect(page.getByTestId('year-summary')).toContainText('3개년 선택')
+
+  await page.getByTestId('load-button').click()
+  await expect(page.getByTestId('load-summary')).toContainText('분석 3개년')
+
+  // 2단계의 표가 정말 3행인지 본다. 요약 문구만 보면 서버가 무시해도 모른다.
+  await page.getByTestId('next-button').click()
+  const rows = page.getByTestId('year-table').locator('tbody tr')
+  await expect(rows).toHaveCount(3)
+})
+
+test('기준 연도를 빼면 기준 연도가 따라 옮겨간다', async ({ page }) => {
+  // 그대로 두면 서버가 422 로 막는데, 화면에는 왜 막혔는지 보이지 않는다.
+  await page.goto('/')
+  await pickUniversity(page, '호서대학교')
+
+  const yearSelect = page.getByTestId('year-select')
+  const base = await yearSelect.inputValue()
+
+  // 기준 연도 칩을 눌러 선택에서 뺀다
+  await page.getByTestId('year-picker').getByRole('checkbox', { name: new RegExp(`^${base}년`) }).click()
+
+  await expect(yearSelect).not.toHaveValue(base)
+  // 그래도 불러오기는 된다 — 막힌 채로 두지 않는다
+  await page.getByTestId('load-button').click()
+  await expect(page.getByTestId('load-summary')).toBeVisible()
+})
+
+test('고른 연도가 3단계 차트 주소에도 실린다', async ({ page }) => {
+  // 여기가 갈라지면 화면과 Word 의 그림이 다르다. 비교군에서 실제로 났던 사고다.
+  await page.goto('/')
+  await pickUniversity(page, '호서대학교')
+  await page.getByRole('button', { name: '최근 5년' }).click()
+  await page.getByTestId('load-button').click()
+  await expect(page.getByTestId('load-summary')).toContainText('분석 5개년')
+
+  // 3단계는 2단계를 지나야 열린다. 도달하지 않은 단계로는 갈 수 없다.
+  await page.getByTestId('next-button').click() // 2단계
+  await page.getByTestId('next-button').click() // 3단계
+
+  const src = await page.getByTestId('chart-rank').getByRole('img').getAttribute('src')
+  const years = new URLSearchParams(src!.split('?')[1]).getAll('years')
+  expect(years).toHaveLength(5)
 })
 
 test('2단계에 연도별 상세 표가 있다', async ({ page }) => {
@@ -184,10 +257,47 @@ test('일괄 생성은 이미 쓴 글을 덮어쓰지 않는다', async ({ page 
   // 글이 한 번의 클릭에 사라졌다.
   await expect(page.getByTestId('generate-button')).toContainText('비어 있는 3개 절')
 
-  // 키가 없어 실패하더라도 내가 쓴 글은 그대로 남아야 한다
+  // 여기부터는 "생성이 실패해도 내가 쓴 글은 남는다" 는 계약이다. 실패를
+  // 만들려면 키가 없어야 한다 — 있으면 진짜 호출이 나간다.
+  test.skip(
+    await apiKeyConfigured(page),
+    '이 머신의 .env 에 키가 있어 실패 경로를 만들 수 없다',
+  )
   await page.getByTestId('generate-button').click()
   await expect(page.getByTestId('narrative-error')).toBeVisible()
   await expect(page.getByTestId('narrative-trend')).toHaveValue('손으로 고친 글')
+})
+
+/**
+ * 데이터 갱신 패널.
+ *
+ * **여기서 진짜 업로드를 하지 않는다.** e2e 서버는 저장소 루트를 CWD 로 돌아서,
+ * 한 번이라도 전처리가 성공하면 추적 중인 `output/*.csv` 가 실제로 다시 쓰인다.
+ * 서버 쪽 동작은 `tests/api/test_preprocess_upload.py` 가 `tmp_path` 안에서
+ * 검사한다. 여기서는 화면이 요청을 보내기 **전에** 막는 것까지만 본다.
+ */
+test('데이터 갱신 패널이 상단바에서 열린다', async ({ page }) => {
+  // 원본에는 있었고(research.py:885) 이관에서 엔드포인트째 빠졌던 기능이다.
+  await page.goto('/')
+  await page.getByTestId('data-update-toggle').click()
+
+  await expect(page.getByTestId('raw-file-input')).toBeVisible()
+  // 고르기 전에는 누를 수 없다 — output/ 을 통째로 다시 만드는 동작이다
+  await expect(page.getByTestId('preprocess-button')).toBeDisabled()
+})
+
+test('연도 없는 파일명은 보내기 전에 막는다', async ({ page }) => {
+  await page.goto('/')
+  await page.getByTestId('data-update-toggle').click()
+
+  await page.getByTestId('raw-file-input').setInputFiles({
+    name: '연구실적.xlsx',
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    buffer: Buffer.from('not really xlsx'),
+  })
+
+  await expect(page.getByTestId('picked-files')).toContainText('연도가 없다')
+  await expect(page.getByTestId('preprocess-button')).toBeDisabled()
 })
 
 test('설정에서 API 키 상태를 볼 수 있다', async ({ page }) => {
@@ -386,8 +496,10 @@ test('5단계에서 Word 보고서를 실제로 내려받는다', async ({ page 
 })
 
 test('GPT 키가 없으면 이유를 말한다 (V16)', async ({ page }) => {
-  // 서버에 키가 없는 상태로 CI/로컬이 돈다. 사이드바에 "⚠ 미설정" 만 뜨고
-  // 원인을 안 알려주던 것이 V16 이었다.
+  // 사이드바에 "⚠ 미설정" 만 뜨고 원인을 안 알려주던 것이 V16 이었다.
+  // 키가 없는 상태에서만 확인할 수 있다 — CI 가 늘 그 상태다.
+  await page.goto('/')
+  test.skip(await apiKeyConfigured(page), '이 머신의 .env 에 키가 있다')
   await loadAndAdvance(page)
   await page.getByTestId('next-button').click()
   await page.getByTestId('next-button').click() // 4

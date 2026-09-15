@@ -35,6 +35,7 @@ export function Step5Report({ state }: StepProps) {
         year: stats.year,
         regionName: stats.regionName,
         compareGroup: [...stats.compareGroup],
+        years: [...stats.years],
         narratives,
       })
       // 브라우저 다운로드는 임시 <a> 를 만들어 클릭하는 것이 유일한 방법이다.
@@ -67,7 +68,12 @@ export function Step5Report({ state }: StepProps) {
       >
         <dt className="text-sm text-[var(--text-secondary)]">대상</dt>
         <dd className="m-0 text-sm text-[var(--text-primary)]">
-          {stats.university} · {stats.regionName} · {stats.year}년
+          {stats.university} · {stats.regionName} · 기준 {stats.year}년
+        </dd>
+
+        <dt className="text-sm text-[var(--text-secondary)]">분석 연도</dt>
+        <dd className="m-0 text-sm text-[var(--text-primary)]">
+          {stats.years.length}개년 ({stats.years[0]}–{stats.years[stats.years.length - 1]})
         </dd>
 
         <dt className="text-sm text-[var(--text-secondary)]">비교군</dt>

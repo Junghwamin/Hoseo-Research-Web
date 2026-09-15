@@ -71,6 +71,19 @@ export interface WizardState {
   readonly compareGroup: readonly string[] | null
 
   /**
+   * 사용자가 고른 분석 연도. **입력**이다. `null` 이면 전 연도.
+   *
+   * 원본의 「분석 연도 선택」 multiselect 가 하던 일이다. 추이·평균·순위에
+   * 남길 해를 정한다 — 기준 연도(`year`)와는 다르다. 기준 연도는 비교표와
+   * 전년대비가 보는 **한 해**이고, 이쪽은 계열에 남길 **여러 해**다.
+   *
+   * 비교군과 같은 이유로 입력과 출력을 구분하지 않는다: `loadSuccess` 가
+   * 서버가 확정한 값으로 덮어쓴다. 그래야 이후 차트·보고서 요청이 서버가
+   * 실제로 쓴 연도를 싣는다.
+   */
+  readonly years: readonly number[] | null
+
+  /**
    * 서버가 확정해 돌려준 권역. **출력**이다.
    *
    * 클라이언트가 추측하지 않는다(V03) — '권역평균' 이 엉뚱한 모집단을
@@ -112,6 +125,7 @@ export type WizardAction =
       readonly year: number
       readonly regionChoice?: string | null
       readonly compareGroup?: readonly string[] | null
+      readonly years?: readonly number[] | null
     }
   | { readonly type: 'loadStart' }
   | { readonly type: 'loadSuccess'; readonly stats: StatsResponse }

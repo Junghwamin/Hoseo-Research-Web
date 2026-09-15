@@ -149,6 +149,13 @@ class DatasetInfo(BaseModel):
     nationalRankScopeNote: str
 
 
+#: 분석 연도 필드의 공통 설명. 요청 4종이 같은 뜻으로 쓴다.
+_YEARS_DESC = (
+    "추이·평균·순위에 남길 연도. 생략하면 전 연도. "
+    "**기준 연도(year)가 반드시 포함되어야 한다.**"
+)
+
+
 class StatsRequest(BaseModel):
     university: str
     year: int
@@ -156,6 +163,7 @@ class StatsRequest(BaseModel):
     # V03 이 났던 지점 — 권역 미설정이면 '권역평균'이 전국 평균이 됐다.
     regionName: str | None = None
     compareGroup: list[str] | None = None
+    years: list[int] | None = Field(default=None, description=_YEARS_DESC)
 
 
 class StatsResponse(BaseModel):
@@ -163,6 +171,12 @@ class StatsResponse(BaseModel):
     year: int
     regionName: str
     compareGroup: list[str]
+    #: 서버가 확정한 분석 연도. **화면은 이 값을 그대로 되돌려 보낸다.**
+    #:
+    #: 비교군과 같은 이유다 — 요청이 생략하면 서버가 전 연도로 채우는데,
+    #: 그 사실을 화면이 모르면 차트 요청만 연도 없이 나가 Word 와 그림이
+    #: 갈라진다. 서버가 쓴 값을 돌려주고 이후 요청은 전부 이것을 싣는다.
+    years: list[int]
     #: 비교군을 정상적으로 채우지 못했으면 그 이유. 정상이면 None.
     #: R-RS-02 의 교훈 — 자기 자신과 비교하게 되는 상황을 **조용히** 넘기지 않는다.
     #: (제주권은 전 연도에 걸쳐 대학이 1개교뿐이라 실제로 발생한다.)
@@ -197,6 +211,7 @@ class NarrativeRequest(BaseModel):
     year: int
     regionName: str | None = None
     compareGroup: list[str] | None = None
+    years: list[int] | None = Field(default=None, description=_YEARS_DESC)
     #: 생성할 서술. 생략하면 4종 전부.
     keys: list[str] | None = None
 
@@ -218,6 +233,7 @@ class ReportRequest(BaseModel):
     year: int
     regionName: str | None = None
     compareGroup: list[str] | None = None
+    years: list[int] | None = Field(default=None, description=_YEARS_DESC)
     #: 화면에서 편집한 서술. 비어 있으면 그 절은 제목만 들어간다.
     narratives: dict[str, str] = Field(default_factory=dict)
 
@@ -244,6 +260,33 @@ class UniversitiesResponse(BaseModel):
     regionName: str
     year: int
     rows: list[UniversityRow]
+
+
+# ---------------------------------------------------------------------------
+# 데이터 갱신
+# ---------------------------------------------------------------------------
+
+
+class PreprocessResponse(BaseModel):
+    """전처리 결과 요약.
+
+    **무엇이 바뀌었는지 숫자로 말한다.** "완료됐습니다" 만 띄우면 사용자는
+    올린 파일이 실제로 반영됐는지 알 수 없다 — 연도를 못 읽어 조용히
+    건너뛰어도 화면은 똑같이 성공이라고 한다.
+    """
+
+    #: 결과에 들어간 연도 전체. 올린 연도만이 아니라 `Raw data/` 폴더 전체다.
+    years: list[int]
+    #: 집계된 대학 수(전 연도 합집합).
+    universities: int
+    nationalRows: int
+    regionalRows: int
+    #: 전처리가 실제로 읽은 Raw 파일 이름.
+    sourceFiles: list[str]
+    #: 이번에 저장한 업로드 파일 이름.
+    savedFiles: list[str]
+    #: 덮어쓰기 직전 `output/` 을 담아 둔 폴더 이름. 처음이면 None.
+    backupPath: str | None
 
 
 # ---------------------------------------------------------------------------

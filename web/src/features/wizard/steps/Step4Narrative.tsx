@@ -43,6 +43,9 @@ export function Step4Narrative({ state, actions }: StepProps) {
         year: stats.year,
         regionName: stats.regionName,
         compareGroup: [...stats.compareGroup],
+        // 서술의 근거가 되는 숫자는 화면에 보이는 것과 같아야 한다.
+        // 연도를 빼면 GPT 는 11개년을 보고 쓰는데 화면엔 3개년만 있다.
+        years: [...stats.years],
         keys: [...keys],
       })
       for (const [key, text] of Object.entries(res.narratives)) {

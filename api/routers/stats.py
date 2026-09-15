@@ -15,7 +15,7 @@ import pandas as pd
 from fastapi import APIRouter
 
 import core.data_loader as dl
-from api import deps, schemas
+from api import analysis, deps, schemas
 
 router = APIRouter(prefix="/api", tags=["stats"])
 
@@ -58,61 +58,37 @@ def get_regions(university: str) -> schemas.RegionsResponse:
 
 @router.post("/stats", response_model=schemas.StatsResponse)
 def post_stats(req: schemas.StatsRequest) -> schemas.StatsResponse:
-    national_df, regional_df = deps.get_frames()
-
-    deps.require_year(req.year, national_df)
-    deps.require_university(req.university, national_df, year=req.year)
-
-    # 권역과 비교군은 반드시 확정된 값으로 아래에 넘긴다. None 을 흘려보내면
-    # '권역평균' 이 전국 평균이 된다(V03).
-    region_name = deps.resolve_region(req.university, regional_df, req.regionName)
-    compare_group, compare_note = deps.resolve_compare_group(
-        req.university, region_name, regional_df, req.year, req.compareGroup
+    # 모집단 판정과 계산은 `api.analysis` 한 곳에서만 한다. 여기서 한 번 더
+    # 하면 보고서·차트와 갈라질 자리가 생긴다 — 실제로 두 번 그랬다.
+    scope = analysis.resolve_scope(
+        req.university, req.year, req.regionName, req.compareGroup, req.years
     )
-
-    trend = dl.get_hoseo_trend(
-        national_df, regional_df, university=req.university, region_name=region_name
-    )
-    averages = dl.get_averages(
-        national_df, regional_df, compare_group=compare_group, region_name=region_name
-    )
-    ranks = dl.get_rank_changes(
-        national_df, regional_df, university=req.university, region_name=region_name
-    )
-    compare = dl.get_compare_group_data(
-        national_df,
-        regional_df,
-        req.year,
-        compare_group=compare_group,
-        region_name=region_name,
-    )
-    yoy = dl.get_yoy_changes(
-        regional_df, req.year, university=req.university, region_name=region_name
-    )
+    stats = analysis.collect_stats(scope)
 
     return schemas.StatsResponse(
-        university=req.university,
-        year=req.year,
-        regionName=region_name,
-        compareGroup=compare_group,
-        compareGroupNote=compare_note,
+        university=scope.university,
+        year=scope.year,
+        regionName=scope.region_name,
+        compareGroup=scope.compare_group,
+        compareGroupNote=scope.compare_note,
+        years=scope.years,
         trend={
             y: schemas.TrendPoint(**schemas.translate(v, schemas.TREND_KEYS))
-            for y, v in trend.items()
+            for y, v in stats["trend"].items()
         },
         averages={
             y: schemas.Averages(**schemas.translate(v, schemas.AVERAGE_KEYS))
-            for y, v in averages.items()
+            for y, v in stats["averages"].items()
         },
         rankChanges={
             y: schemas.RankChange(**schemas.translate(v, schemas.RANK_CHANGE_KEYS))
-            for y, v in ranks.items()
+            for y, v in stats["ranks"].items()
         },
         compare=[
             schemas.CompareRow(**schemas.translate(row, schemas.COMPARE_KEYS))
-            for row in compare
+            for row in stats["compare"]
         ],
-        yoy=_to_yoy(yoy),
+        yoy=_to_yoy(stats["yoy"]),
     )
 
 

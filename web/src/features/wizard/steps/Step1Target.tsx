@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { Combobox } from '../../../components/Combobox'
 import { CompareGroupPicker } from '../../../components/CompareGroupPicker'
+import { YearPicker } from '../../../components/YearPicker'
 import { Button, Field, CONTROL_CLASS } from '../../../design/ui'
 import { useRegionUniversities, useUniversityRegions } from '../hooks'
 import type { StepProps } from './types'
@@ -35,7 +36,29 @@ export function Step1Target({ state, dataset, actions }: StepProps) {
       : null,
   )
 
+  // 분석 연도. `null` 이면 전 연도 — 서버도 생략을 그렇게 읽는다.
+  const [years, setYears] = useState<readonly number[] | null>(state.years)
+
+  const availableYears = dataset?.years ?? []
+  const effectiveYears = years && years.length > 0 ? years : availableYears
+
   const effectiveYear = year ?? latestYear
+
+  /**
+   * 연도 선택이 바뀌었다. 기준 연도가 선택 밖으로 나가면 데려온다.
+   *
+   * 그대로 두면 서버가 422 로 막는데(기준 연도는 분석 연도 안에 있어야 한다),
+   * 화면에는 왜 막혔는지 보이지 않는다. 고칠 수 있는 어긋남은 화면에서 고친다.
+   *
+   * 전부 해제하면 전 연도로 되돌린다. 0개년은 보여줄 것이 없는 상태이고,
+   * 비교군 선택도 같은 규칙으로 동작한다.
+   */
+  function handleYears(next: readonly number[]) {
+    setYears(next.length > 0 ? next : null)
+    if (next.length > 0 && effectiveYear !== null && !next.includes(effectiveYear)) {
+      setYear(next[next.length - 1])
+    }
+  }
 
   const regions = useUniversityRegions(university)
   // 권역이 하나뿐이면 고를 것이 없다 — 그 하나가 곧 답이다.
@@ -89,13 +112,16 @@ export function Step1Target({ state, dataset, actions }: StepProps) {
           onChange={setUniversity}
           placeholder="이름을 입력하거나 목록에서 고른다"
           hint={
-            dataset
-              ? `${dataset.universityCount}개교가 집계에 들어 있다`
+            dataset && latestYear
+              ? `연도마다 집계 대학이 다르다. ${latestYear}년 기준 ${dataset.universityCount}개교`
               : '목록을 불러오는 중…'
           }
         />
 
-        <Field label="기준 연도">
+        <Field
+          label="기준 연도"
+          hint="비교군 표와 전년대비가 보는 해다."
+        >
           {(field) => (
             <select
               {...field}
@@ -105,7 +131,10 @@ export function Step1Target({ state, dataset, actions }: StepProps) {
               disabled={!dataset}
               className={CONTROL_CLASS}
             >
-              {dataset?.years.map((y) => (
+              {/* 고른 연도 안에서만 고를 수 있다. 원본도 기준 연도 선택지를
+                  분석 연도로 제한했다(research.py:627). 제한하지 않으면
+                  화면에 없는 해가 기준이 되어 서버가 막는다. */}
+              {effectiveYears.map((y) => (
                 <option key={y} value={y}>
                   {y}년
                 </option>
@@ -113,6 +142,28 @@ export function Step1Target({ state, dataset, actions }: StepProps) {
             </select>
           )}
         </Field>
+      </div>
+
+      {/* 분석 연도 — 이관에서 통째로 빠져 있던 것이다. 없으면 추이·평균·순위가
+          언제나 전 연도로 그려져, 최근 몇 년만 보는 방법이 없다.
+
+          `Field` 를 쓰지 않는 이유: `Field` 는 `<label htmlFor>` 을 다는데
+          연도 선택은 단일 컨트롤이 아니라 버튼 묶음이다. 가리킬 대상이 없는
+          라벨이 되어 접근성 검사가 걸린다. 묶음은 스스로 이름을 갖는다
+          (`role="group" aria-label`). */}
+      <div className="flex flex-col gap-[var(--spacing-2)]">
+        <p className="m-0 text-sm font-medium text-[var(--text-secondary)]">분석 연도</p>
+        <YearPicker
+          available={availableYears}
+          value={effectiveYears}
+          onChange={handleYears}
+          baseYear={effectiveYear}
+        />
+        <p data-testid="year-summary" className="m-0 text-xs text-[var(--text-muted)]">
+          {effectiveYears.length === availableYears.length
+            ? `추이·평균·순위에 남길 해. 지금은 ${availableYears.length}개년 전부다.`
+            : `${effectiveYears.length}개년 선택 · 전체 ${availableYears.length}개년`}
+        </p>
       </div>
 
       {/* 권역은 **둘 이상일 때만** 묻는다. 하나뿐인데 고르라고 하면 의미
@@ -179,6 +230,7 @@ export function Step1Target({ state, dataset, actions }: StepProps) {
               year: effectiveYear,
               regionChoice,
               compareGroup,
+              years,
             })
           }
         >
@@ -189,8 +241,8 @@ export function Step1Target({ state, dataset, actions }: StepProps) {
           <p data-testid="load-summary" className="m-0 text-sm text-[var(--text-secondary)]">
             <strong className="text-[var(--text-primary)]">{state.stats.university}</strong>
             {' · '}
-            {state.stats.regionName} · {state.stats.year}년 · 비교군{' '}
-            {state.stats.compareGroup.length}개교
+            {state.stats.regionName} · 기준 {state.stats.year}년 · 분석{' '}
+            {state.stats.years.length}개년 · 비교군 {state.stats.compareGroup.length}개교
           </p>
         )}
       </div>

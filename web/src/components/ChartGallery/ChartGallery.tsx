@@ -8,6 +8,8 @@ export interface ChartGalleryProps {
   readonly year: number
   readonly regionName: string | null
   readonly compareGroup: readonly string[] | null
+  /** 분석 연도. 추이·순위 차트의 가로축을 정한다. */
+  readonly years: readonly number[] | null
   /** 그릴 차트 종류. 화면에서 따로 그리는 것은 빼고 넘긴다. */
   readonly kinds: readonly ChartKind[]
 }
@@ -28,6 +30,7 @@ export function ChartGallery({
   year,
   regionName,
   compareGroup,
+  years,
   kinds,
 }: ChartGalleryProps) {
   return (
@@ -42,6 +45,7 @@ export function ChartGallery({
           year={year}
           regionName={regionName}
           compareGroup={compareGroup}
+          years={years}
         />
       ))}
     </div>
@@ -54,15 +58,19 @@ function ServerChart({
   year,
   regionName,
   compareGroup,
+  years,
 }: {
   kind: ChartKind
   university: string
   year: number
   regionName: string | null
   compareGroup: readonly string[] | null
+  years: readonly number[] | null
 }) {
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
-  const src = chartUrl(kind, { university, year, region: regionName, compareGroup })
+  // 그림을 결정하는 입력을 하나도 빠뜨리지 않는다. 빠뜨린 것이 있으면
+  // 화면과 Word 가 갈라진다 — 비교군에서 실제로 났던 사고다.
+  const src = chartUrl(kind, { university, year, region: regionName, compareGroup, years })
   const title = CHART_TITLES[kind]
 
   return (

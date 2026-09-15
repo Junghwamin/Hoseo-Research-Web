@@ -121,6 +121,7 @@ export function CompareGroupPicker({
       )}
 
       <ul
+        data-testid="compare-candidates"
         // 목록이 길어도 화면을 밀어내지 않게 한다. 1단계에서 아래 버튼이
         // 화면 밖으로 밀리면 "다음" 을 못 찾는다.
         className="

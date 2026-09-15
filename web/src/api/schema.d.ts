@@ -82,6 +82,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/preprocess": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Preprocess
+         * @description Raw Excel 을 올려 데이터를 다시 만든다.
+         *
+         *     **`Raw data/` 폴더 전체를 다시 계산한다.** 올린 파일만 처리하면 CSV 에
+         *     그 연도만 남아 나머지가 사라진다 — 순위가 그 해 전체 대학을 놓고 매겨지는
+         *     값이라 부분 계산이 성립하지 않는다.
+         *
+         *     실패하면 아무것도 바뀌지 않는다. 임시 폴더에 쓰고 끝까지 성공했을 때만
+         *     `output/` 에 반영하며, 덮어쓰기 직전 내용은 백업해 둔다.
+         *
+         *     파일 읽기를 먼저 다 끝내고 판정으로 넘긴다. 서비스 층이 `UploadFile` 을
+         *     모르게 해야 테스트에서 바이트만 주고 돌릴 수 있다.
+         */
+        post: operations["post_preprocess_api_preprocess_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/regions": {
         parameters: {
             query?: never;
@@ -212,6 +242,14 @@ export interface components {
             /** Regional */
             regional: number | null;
         };
+        /** Body_post_preprocess_api_preprocess_post */
+        Body_post_preprocess_api_preprocess_post: {
+            /**
+             * Files
+             * @description 대학알리미 Raw xlsx. 파일명에 '2026년' 또는 '2026_' 처럼 연도가 들어 있어야 한다.
+             */
+            files: string[];
+        };
         /**
          * CompareRow
          * @description 비교군 표의 한 행.
@@ -263,6 +301,11 @@ export interface components {
             university: string;
             /** Year */
             year: number;
+            /**
+             * Years
+             * @description 추이·평균·순위에 남길 연도. 생략하면 전 연도. **기준 연도(year)가 반드시 포함되어야 한다.**
+             */
+            years?: number[] | null;
         };
         /**
          * NarrativeResponse
@@ -281,6 +324,30 @@ export interface components {
             narratives: {
                 [key: string]: string;
             };
+        };
+        /**
+         * PreprocessResponse
+         * @description 전처리 결과 요약.
+         *
+         *     **무엇이 바뀌었는지 숫자로 말한다.** "완료됐습니다" 만 띄우면 사용자는
+         *     올린 파일이 실제로 반영됐는지 알 수 없다 — 연도를 못 읽어 조용히
+         *     건너뛰어도 화면은 똑같이 성공이라고 한다.
+         */
+        PreprocessResponse: {
+            /** Backuppath */
+            backupPath: string | null;
+            /** Nationalrows */
+            nationalRows: number;
+            /** Regionalrows */
+            regionalRows: number;
+            /** Savedfiles */
+            savedFiles: string[];
+            /** Sourcefiles */
+            sourceFiles: string[];
+            /** Universities */
+            universities: number;
+            /** Years */
+            years: number[];
         };
         /**
          * RankChange
@@ -324,6 +391,11 @@ export interface components {
             university: string;
             /** Year */
             year: number;
+            /**
+             * Years
+             * @description 추이·평균·순위에 남길 연도. 생략하면 전 연도. **기준 연도(year)가 반드시 포함되어야 한다.**
+             */
+            years?: number[] | null;
         };
         /**
          * SettingsResponse
@@ -352,6 +424,11 @@ export interface components {
             university: string;
             /** Year */
             year: number;
+            /**
+             * Years
+             * @description 추이·평균·순위에 남길 연도. 생략하면 전 연도. **기준 연도(year)가 반드시 포함되어야 한다.**
+             */
+            years?: number[] | null;
         };
         /** StatsResponse */
         StatsResponse: {
@@ -379,6 +456,8 @@ export interface components {
             university: string;
             /** Year */
             year: number;
+            /** Years */
+            years: number[];
             yoy: components["schemas"]["YoYChanges"];
         };
         /**
@@ -479,6 +558,8 @@ export interface operations {
                 region?: string | null;
                 /** @description 비교군 대학 이름. **반드시 보고서와 같은 값을 보내야 한다** — 생략하면 서버 기본 비교군으로 그려져 Word 와 그림이 달라진다. */
                 compareGroup?: string[] | null;
+                /** @description 분석 연도. 비교군과 같은 이유로 **보고서와 같은 값을 보내야 한다** — 생략하면 전 연도로 그려져 화면의 추이 차트와 Word 가 갈라진다. */
+                years?: number[] | null;
             };
             header?: never;
             path: {
@@ -570,6 +651,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NarrativeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_preprocess_api_preprocess_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_post_preprocess_api_preprocess_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreprocessResponse"];
                 };
             };
             /** @description Validation Error */

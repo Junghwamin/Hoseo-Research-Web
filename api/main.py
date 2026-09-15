@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
-from api.routers import report, settings, stats
+from api.routers import data, report, settings, stats
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 WEB_DIST = PROJECT_ROOT / "web" / "dist"
@@ -41,6 +41,7 @@ app = FastAPI(
 app.include_router(stats.router)
 app.include_router(report.router)
 app.include_router(settings.router)
+app.include_router(data.router)
 
 
 @app.get("/api/health")

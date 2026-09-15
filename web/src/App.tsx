@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import { AppBar } from './components/AppBar'
+import { DataUpdatePanel } from './components/DataUpdatePanel'
 import { HomeHero } from './components/HomeHero'
 import { MediaBand } from './components/MediaBand'
 import { SettingsPanel } from './components/SettingsPanel'
@@ -34,6 +35,16 @@ const BAND_IMAGE = '/media/band-library.webp'
 export default function App() {
   const { choice, setTheme } = useTheme()
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [dataOpen, setDataOpen] = useState(false)
+  /**
+   * 데이터를 다시 만들 때마다 오른다. `WizardProvider` 의 `key` 라서,
+   * 올라가면 마법사가 통째로 새로 마운트된다.
+   *
+   * 전처리는 대학·연도·순위를 전부 바꿀 수 있다. 화면에 남아 있던 분석
+   * 결과는 **더는 존재하지 않는 데이터를 가리킨다** — 리셋이 아니라 잔재다.
+   * 어떤 키를 지울지 고르는 대신 트리를 새로 만든다(V17 과 같은 판단).
+   */
+  const [dataVersion, setDataVersion] = useState(0)
   const visible = MODULES.filter((m) => FEATURES[m.key])
 
   return (
@@ -44,17 +55,31 @@ export default function App() {
         theme={choice}
         onThemeChange={setTheme}
         actions={
-          FEATURES.settings ? (
-            <Button
-              size="sm"
-              data-testid="settings-toggle"
-              aria-expanded={settingsOpen}
-              aria-controls="settings-panel"
-              onClick={() => setSettingsOpen((v) => !v)}
-            >
-              설정
-            </Button>
-          ) : undefined
+          <>
+            {FEATURES.dataUpdate && (
+              <Button
+                size="sm"
+                variant="ghost"
+                data-testid="data-update-toggle"
+                aria-expanded={dataOpen}
+                aria-controls="data-update-panel"
+                onClick={() => setDataOpen((v) => !v)}
+              >
+                데이터 갱신
+              </Button>
+            )}
+            {FEATURES.settings && (
+              <Button
+                size="sm"
+                data-testid="settings-toggle"
+                aria-expanded={settingsOpen}
+                aria-controls="settings-panel"
+                onClick={() => setSettingsOpen((v) => !v)}
+              >
+                설정
+              </Button>
+            )}
+          </>
         }
       />
 
@@ -72,6 +97,17 @@ export default function App() {
           px-[var(--spacing-5)] py-[var(--spacing-7)]
         "
       >
+        {dataOpen && FEATURES.dataUpdate && (
+          <section id="data-update-panel" aria-label="데이터 갱신">
+            <Card eyebrow="데이터 갱신" title="Raw Excel 업로드">
+              <DataUpdatePanel
+                onUpdated={() => setDataVersion((v) => v + 1)}
+                onClose={() => setDataOpen(false)}
+              />
+            </Card>
+          </section>
+        )}
+
         {settingsOpen && FEATURES.settings && (
           <section id="settings-panel" aria-label="설정">
             <Card eyebrow="설정" title="OpenAI API 키">
@@ -106,7 +142,7 @@ export default function App() {
           </ul>
         </nav>
 
-        <WizardProvider>
+        <WizardProvider key={dataVersion}>
           <WizardShell />
         </WizardProvider>
       </main>

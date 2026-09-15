@@ -31,10 +31,9 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 
 import core.chart_generator as cg
-import core.data_loader as dl
 import core.gpt_reporter as gpt
 import core.report_builder as rb
-from api import deps, schemas
+from api import analysis, schemas
 
 router = APIRouter(prefix="/api", tags=["report"])
 
@@ -70,52 +69,6 @@ def _require_api_key() -> str:
     return key
 
 
-def _resolve(
-    university: str,
-    year: int,
-    region_name: str | None,
-    compare_group: list[str] | None,
-) -> tuple[pd.DataFrame, pd.DataFrame, str, list[str]]:
-    """대상·연도를 검증하고 모집단을 확정한다. /api/stats 와 같은 규칙을 쓴다."""
-    national_df, regional_df = deps.get_frames()
-    deps.require_year(year, national_df)
-    deps.require_university(university, national_df, year=year)
-
-    resolved_region = deps.resolve_region(university, regional_df, region_name)
-    group, _note = deps.resolve_compare_group(
-        university, resolved_region, regional_df, year, compare_group
-    )
-    return national_df, regional_df, resolved_region, group
-
-
-def _collect_stats(
-    national_df: pd.DataFrame,
-    regional_df: pd.DataFrame,
-    university: str,
-    region_name: str,
-    year: int,
-    compare_group: list[str],
-) -> dict:
-    return {
-        "trend": dl.get_hoseo_trend(
-            national_df, regional_df, university=university, region_name=region_name
-        ),
-        "averages": dl.get_averages(
-            national_df, regional_df, compare_group=compare_group, region_name=region_name
-        ),
-        "ranks": dl.get_rank_changes(
-            national_df, regional_df, university=university, region_name=region_name
-        ),
-        "compare": dl.get_compare_group_data(
-            national_df, regional_df, year,
-            compare_group=compare_group, region_name=region_name,
-        ),
-        "yoy": dl.get_yoy_changes(
-            regional_df, year, university=university, region_name=region_name
-        ),
-    }
-
-
 # ---------------------------------------------------------------------------
 # /api/narrative
 # ---------------------------------------------------------------------------
@@ -133,12 +86,11 @@ def post_narrative(req: schemas.NarrativeRequest) -> schemas.NarrativeResponse:
 
     api_key = _require_api_key()
 
-    national_df, regional_df, region_name, group = _resolve(
-        req.university, req.year, req.regionName, req.compareGroup
+    scope = analysis.resolve_scope(
+        req.university, req.year, req.regionName, req.compareGroup, req.years
     )
-    stats = _collect_stats(
-        national_df, regional_df, req.university, region_name, req.year, group
-    )
+    region_name = scope.region_name
+    stats = analysis.collect_stats(scope)
 
     from openai import OpenAI
 
@@ -183,15 +135,16 @@ def post_narrative(req: schemas.NarrativeRequest) -> schemas.NarrativeResponse:
 
 @router.post("/report")
 def post_report(req: schemas.ReportRequest) -> Response:
-    national_df, regional_df, region_name, group = _resolve(
-        req.university, req.year, req.regionName, req.compareGroup
+    scope = analysis.resolve_scope(
+        req.university, req.year, req.regionName, req.compareGroup, req.years
     )
-    stats = _collect_stats(
-        national_df, regional_df, req.university, region_name, req.year, group
-    )
+    region_name = scope.region_name
+    stats = analysis.collect_stats(scope)
 
     with _CHART_LOCK:
-        charts = _build_charts(regional_df, stats, req.university, region_name, req.year)
+        charts = _build_charts(
+            scope.regional_df, stats, req.university, region_name, req.year
+        )
 
     # 화면에서 편집한 서술을 그대로 쓴다. 없는 키는 빈 문자열 — 그 절은
     # 제목만 들어간다. 서버가 임의로 채우지 않는다.
@@ -287,14 +240,17 @@ def _charts_for(
     year: int,
     region: str | None,
     compare_group: list[str] | None,
+    years: list[int] | None,
 ) -> dict[str, BytesIO]:
     """5종 차트를 그려 돌려준다. 같은 입력이면 다시 그리지 않는다."""
-    national_df, regional_df, region_name, group = _resolve(
-        university, year, region, compare_group
-    )
+    scope = analysis.resolve_scope(university, year, region, compare_group, years)
+
     # 키는 **확정된** 값으로 만든다. 요청이 region 을 생략해도 서버가 판정한
     # 권역이 같으면 같은 그림이므로 캐시가 맞는다.
-    key = (university, year, region_name, tuple(group))
+    #
+    # 분석 연도도 키에 들어간다. 빠뜨리면 연도만 바꿨을 때 이전 그림이 그대로
+    # 나와, 화면은 3개년인데 차트는 11개년인 상태가 된다.
+    key = (university, year, scope.region_name, tuple(scope.compare_group), tuple(scope.years))
 
     with _CHART_LOCK:
         cached = _CHART_CACHE.get(key)
@@ -302,10 +258,10 @@ def _charts_for(
             _CHART_CACHE.move_to_end(key)
             return cached
 
-        stats = _collect_stats(
-            national_df, regional_df, university, region_name, year, group
+        stats = analysis.collect_stats(scope)
+        charts = _build_charts(
+            scope.regional_df, stats, university, scope.region_name, year
         )
-        charts = _build_charts(regional_df, stats, university, region_name, year)
         _CHART_CACHE[key] = charts
         while len(_CHART_CACHE) > _CHART_CACHE_MAX:
             _CHART_CACHE.popitem(last=False)
@@ -325,6 +281,13 @@ def get_chart(
             "생략하면 서버 기본 비교군으로 그려져 Word 와 그림이 달라진다."
         ),
     ),
+    years: list[int] | None = Query(
+        None,
+        description=(
+            "분석 연도. 비교군과 같은 이유로 **보고서와 같은 값을 보내야 한다** — "
+            "생략하면 전 연도로 그려져 화면의 추이 차트와 Word 가 갈라진다."
+        ),
+    ),
 ) -> Response:
     """Word 보고서에 들어가는 것과 **같은** PNG 를 돌려준다.
 
@@ -341,7 +304,7 @@ def get_chart(
             detail=f"없는 차트 종류: {kind}. 가능: {list(schemas.CHART_KEYS)}",
         )
 
-    payload = _charts_for(university, year, region, compareGroup)[kind].getvalue()
+    payload = _charts_for(university, year, region, compareGroup, years)[kind].getvalue()
     return Response(
         content=payload,
         media_type="image/png",
