@@ -38,8 +38,52 @@ from core.config import (
 
 
 # ---------------------------------------------------------------------------
+# 색 — DESIGN.md §7 「Word 표」. 값은 'RRGGBB'(python-docx·w:shd 표기).
+# 글꼴은 독자 PC 기준(맑은 고딕)이라 바꾸지 않는다.
+# ---------------------------------------------------------------------------
+COLOR_INK = "27272A"      # 표지·섹션 제목 글자, 표 머리 채움
+COLOR_ACCENT = "EE5400"   # 제목 밑선·표지 선 — 주홍은 가리키는 선에만
+FILL_HEADER = "27272A"    # 표 머리(흰 글자)
+FILL_ZEBRA = "F4F4F5"     # 짝수 데이터 행
+FILL_PLAIN = "FFFFFF"     # 홀수 데이터 행
+FILL_TARGET = "FFE8DC"    # 대상 대학 행(+ 굵게)
+
+#: CT_PPr 스키마에서 w:pBdr 뒤에 오는 형제 전부. insert_element_before 에 넘겨
+#: pBdr 를 제자리에 넣는다 — append 로 w:spacing·w:jc 뒤에 붙이면 Word 가 "복구" 를 묻는다.
+_PBDR_SUCCESSORS = (
+    "w:shd", "w:tabs", "w:suppressAutoHyphens", "w:kinsoku", "w:wordWrap",
+    "w:overflowPunct", "w:topLinePunct", "w:autoSpaceDE", "w:autoSpaceDN", "w:bidi",
+    "w:adjustRightInd", "w:snapToGrid", "w:spacing", "w:ind", "w:contextualSpacing",
+    "w:mirrorIndents", "w:suppressOverlap", "w:jc", "w:textDirection", "w:textAlignment",
+    "w:textboxTightWrap", "w:outlineLvl", "w:divId", "w:cnfStyle", "w:rPr", "w:sectPr",
+    "w:pPrChange",
+)
+
+
+# ---------------------------------------------------------------------------
 # 헬퍼: 스타일 적용
 # ---------------------------------------------------------------------------
+
+def _add_accent_rule(paragraph, size_eighths: int = 6, space_pt: int = 1):
+    """단락 아래에 주홍 단일선(w:pBdr/w:bottom)을 긋는다. sz 는 1/8pt — 6 ≈ 1px."""
+    bottom = OxmlElement("w:bottom")
+    bottom.set(qn("w:val"), "single")
+    bottom.set(qn("w:sz"), str(size_eighths))
+    bottom.set(qn("w:space"), str(space_pt))
+    bottom.set(qn("w:color"), COLOR_ACCENT)
+    pBdr = OxmlElement("w:pBdr")
+    pBdr.append(bottom)
+    paragraph._p.get_or_add_pPr().insert_element_before(pBdr, *_PBDR_SUCCESSORS)
+
+
+def _set_paragraph_mark_size(paragraph, half_points: int):
+    """글자 없는 단락의 높이는 단락 기호(w:pPr/w:rPr)의 크기가 정한다 — 선만 있는 단락을 얇게."""
+    rPr = OxmlElement("w:rPr")
+    sz = OxmlElement("w:sz")
+    sz.set(qn("w:val"), str(half_points))
+    rPr.append(sz)
+    paragraph._p.get_or_add_pPr().insert_element_before(rPr, "w:sectPr", "w:pPrChange")
+
 
 def _set_cell_bg(cell, hex_color: str):
     """셀 배경색 설정 (hex: 'RRGGBB')."""
@@ -71,7 +115,9 @@ def _add_heading(doc: Document, text: str, level: int = 1):
     p.paragraph_format.space_before = Pt(12)
     p.paragraph_format.space_after = Pt(6)
     run = p.add_run(text)
-    _set_font(run, size_pt=13 if level == 1 else 11, bold=True, color_hex="1f4e79")
+    _set_font(run, size_pt=13 if level == 1 else 11, bold=True, color_hex=COLOR_INK)
+    if level == 1:
+        _add_accent_rule(p)
 
 
 def _add_narrative(doc: Document, text: str):
@@ -117,7 +163,7 @@ def _add_trend_table(doc: Document, hoseo_trend: dict[int, dict], region_name: s
     for i, h in enumerate(headers):
         hdr_cells[i].text = h
         hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        _set_cell_bg(hdr_cells[i], "2E75B6")
+        _set_cell_bg(hdr_cells[i], FILL_HEADER)
         run = hdr_cells[i].paragraphs[0].runs[0]
         _set_font(run, size_pt=9, bold=True, color_hex="FFFFFF")
 
@@ -133,7 +179,7 @@ def _add_trend_table(doc: Document, hoseo_trend: dict[int, dict], region_name: s
             f"{d['전국순위']}위",
         ]
         row_cells = table.rows[row_idx + 1].cells
-        bg = "D6E4F0" if row_idx % 2 == 0 else "FFFFFF"
+        bg = FILL_ZEBRA if row_idx % 2 == 0 else FILL_PLAIN
         for i, v in enumerate(vals):
             row_cells[i].text = v
             row_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -163,7 +209,7 @@ def _add_compare_group_table(doc: Document, compare_data: list[dict], year: int,
     for i, h in enumerate(headers):
         hdr_cells[i].text = h
         hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        _set_cell_bg(hdr_cells[i], "2E75B6")
+        _set_cell_bg(hdr_cells[i], FILL_HEADER)
         run = hdr_cells[i].paragraphs[0].runs[0]
         _set_font(run, size_pt=9, bold=True, color_hex="FFFFFF")
 
@@ -178,7 +224,7 @@ def _add_compare_group_table(doc: Document, compare_data: list[dict], year: int,
             f"{d['권역순위']}위" if d['권역순위'] else "-",
         ]
         row_cells = table.rows[row_idx + 1].cells
-        bg = "FFF2CC" if is_hoseo else ("D6E4F0" if row_idx % 2 == 0 else "FFFFFF")
+        bg = FILL_TARGET if is_hoseo else (FILL_ZEBRA if row_idx % 2 == 0 else FILL_PLAIN)
         for i, v in enumerate(vals):
             row_cells[i].text = v
             row_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -210,7 +256,7 @@ def _add_yoy_table(doc: Document, yoy_changes: dict, year: int):
     for i, h in enumerate(headers):
         hdr_cells[i].text = h
         hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        _set_cell_bg(hdr_cells[i], "2E75B6")
+        _set_cell_bg(hdr_cells[i], FILL_HEADER)
         run = hdr_cells[i].paragraphs[0].runs[0]
         _set_font(run, size_pt=9, bold=True, color_hex="FFFFFF")
 
@@ -219,7 +265,7 @@ def _add_yoy_table(doc: Document, yoy_changes: dict, year: int):
         rate_text = "신규" if rate is None else f"{rate:+.1f}%"
         vals = [gubun, name, f"{prev:.4f}", f"{curr:.4f}", rate_text]
         row_cells = table.rows[row_idx + 1].cells
-        bg = "D6E4F0" if row_idx % 2 == 0 else "FFFFFF"
+        bg = FILL_ZEBRA if row_idx % 2 == 0 else FILL_PLAIN
         for i, v in enumerate(vals):
             row_cells[i].text = v
             row_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -279,12 +325,21 @@ def build_report(
     title_p = doc.add_paragraph()
     title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     title_run = title_p.add_run(f"{univ}")
-    _set_font(title_run, size_pt=16, bold=True, color_hex="2E75B6")
+    _set_font(title_run, size_pt=16, bold=True, color_hex=COLOR_INK)
+
+    # 대학명과 제목 사이의 짧은 주홍 선 — 글자 없는 단락에 아래 테두리만 긋는다.
+    rule_p = doc.add_paragraph()
+    rule_p.paragraph_format.left_indent = Cm(5.5)
+    rule_p.paragraph_format.right_indent = Cm(5.5)
+    rule_p.paragraph_format.space_before = Pt(0)
+    rule_p.paragraph_format.space_after = Pt(0)
+    _set_paragraph_mark_size(rule_p, half_points=8)
+    _add_accent_rule(rule_p, size_eighths=12, space_pt=0)
 
     subtitle_p = doc.add_paragraph()
     subtitle_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     subtitle_run = subtitle_p.add_run(REPORT_TITLE)
-    _set_font(subtitle_run, size_pt=20, bold=True, color_hex="1f4e79")
+    _set_font(subtitle_run, size_pt=20, bold=True, color_hex=COLOR_INK)
     subtitle_p.paragraph_format.space_before = Pt(12)
 
     doc.add_paragraph()

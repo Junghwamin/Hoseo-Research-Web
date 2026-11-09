@@ -21,34 +21,49 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
  * 복사돼 있었다. 복사본이 생기는 순간 하나만 고치는 사고가 나고, 그게
  * Streamlit 판 `styles.py` 가 829줄까지 자란 경로다.
  *
- * 색·간격은 전부 토큰이다(§12-1). 여기에 hex 가 들어오면 `tokens.test.ts`
- * 가 잡는다.
+ * 모양은 DESIGN.md §6 이다 — 직각, 호버에 하드 오프셋 그림자가 뜨며 1px
+ * 떠오르고, 누르면 그림자가 사라지며 1px 내려앉는다. 비활성은 투명도가
+ * 아니라 sunken 채움 + muted 글자다: 흐려진 버튼은 "죽은 버튼" 으로 읽혔다.
+ * 색·간격은 전부 토큰이다. 여기에 hex 가 들어오면 `tokens.test.ts` 가 잡는다.
  */
+
+// 선이 있는 변형만 떠오른다. ghost 는 선이 없어서 그림자가 뜨면 빈 사각형이 떠다닌다.
+const LIFT = `
+  hover:enabled:shadow-[var(--shadow-hard)]
+  hover:enabled:-translate-x-px hover:enabled:-translate-y-px
+`
+
 const VARIANTS: Record<ButtonVariant, string> = {
-  // 주 행동. 한 화면에 하나다 — 검은 알약이 둘이면 어느 쪽이 다음인지 모른다.
+  // 누르는 것. 한 화면에 하나다 — 잉크 사각이 둘이면 어느 쪽이 다음인지 모른다.
   primary: `
     border-[var(--action-bg)] bg-[var(--action-bg)] text-[var(--text-on-action)]
     hover:enabled:border-[var(--action-bg-hover)] hover:enabled:bg-[var(--action-bg-hover)]
+    ${LIFT}
   `,
+  // 투명 + 1px 선, 호버에 흰 채움. 주홍은 가리키는 데 쓰지 호버에 쓰지 않는다.
   secondary: `
-    border-[var(--border-strong)] bg-[var(--surface-raised)] text-[var(--text-primary)]
-    hover:enabled:border-[var(--accent)] hover:enabled:text-[var(--accent)]
+    border-[var(--border-strong)] bg-transparent text-[var(--text-primary)]
+    hover:enabled:bg-[var(--surface-raised)]
+    ${LIFT}
   `,
   ghost: `
     border-transparent bg-transparent text-[var(--text-secondary)]
     hover:enabled:bg-[var(--surface-sunken)] hover:enabled:text-[var(--text-primary)]
   `,
+  // secondary 에 악화 색의 글자·선. 「처음부터 다시」처럼 되돌릴 수 없는 행동에 쓴다.
   danger: `
-    border-[var(--border-subtle)] bg-[var(--surface-raised)] text-[var(--text-muted)]
-    hover:enabled:border-[var(--color-down)] hover:enabled:text-[var(--color-down)]
+    border-[var(--color-down)] bg-transparent text-[var(--color-down)]
+    hover:enabled:bg-[var(--surface-raised)]
+    ${LIFT}
   `,
 }
 
-// 알약이라 좌우 여백이 위아래보다 넉넉해야 글자가 갇히지 않는다.
+// 높이 32 / 36 / 44px. 같은 줄의 입력(44px)·칩과 가운데가 맞아야 한다.
+// 라벨 크기는 높이와 무관하게 본문 하나다 — 큰 버튼이 큰 글자는 아니다.
 const SIZES: Record<ButtonSize, string> = {
-  sm: 'px-[var(--spacing-4)] py-[var(--spacing-1)] text-xs',
-  md: 'px-[var(--spacing-5)] py-[var(--spacing-2)] text-sm',
-  lg: 'px-[var(--spacing-6)] py-[var(--spacing-3)] text-sm',
+  sm: 'h-[2rem] px-[var(--spacing-3)]',
+  md: 'h-[2.25rem] px-[var(--spacing-4)]',
+  lg: 'h-[2.75rem] px-[var(--spacing-6)]',
 }
 
 export function Button({
@@ -70,9 +85,12 @@ export function Button({
       disabled={disabled || busy}
       className={cn(
         `inline-flex items-center justify-center gap-[var(--spacing-2)]
-         rounded-[var(--radius-full)] border font-medium
-         transition-colors duration-[var(--duration-fast)]
-         disabled:cursor-not-allowed disabled:opacity-45`,
+         whitespace-nowrap rounded-none border
+         text-body font-semibold tracking-[0.02em]
+         transition duration-[var(--duration-fast)]
+         active:enabled:translate-x-px active:enabled:translate-y-px active:enabled:shadow-none
+         disabled:cursor-not-allowed disabled:border-[var(--border-subtle)]
+         disabled:bg-[var(--surface-sunken)] disabled:text-[var(--text-muted)]`,
         VARIANTS[variant],
         SIZES[size],
         className,

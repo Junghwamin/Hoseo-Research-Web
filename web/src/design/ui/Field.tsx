@@ -22,7 +22,8 @@ export interface FieldProps {
  * 라벨 + 컨트롤 + 설명/오류 묶음.
  *
  * `aria-describedby` 연결을 손으로 하면 빠뜨린다 — 그리고 빠뜨려도 화면은
- * 멀쩡해 보인다. 여기서 한 번만 맞춰 둔다.
+ * 멀쩡해 보인다. 여기서 한 번만 맞춰 둔다. 라벨은 아이브로(DESIGN.md §6):
+ * 입력 위의 짧은 명사라 본문보다 작고 자간이 넓다.
  */
 export function Field({ label, hint, error, className, children }: FieldProps) {
   const id = useId()
@@ -33,7 +34,7 @@ export function Field({ label, hint, error, className, children }: FieldProps) {
 
   return (
     <div className={cn('flex flex-col gap-[var(--spacing-2)]', className)}>
-      <label htmlFor={id} className="text-sm font-medium text-[var(--text-secondary)]">
+      <label htmlFor={id} className="eyebrow text-[var(--text-secondary)]">
         {label}
       </label>
       {children({
@@ -42,12 +43,12 @@ export function Field({ label, hint, error, className, children }: FieldProps) {
         'aria-invalid': error ? true : undefined,
       })}
       {error && (
-        <p id={errorId} role="alert" className="m-0 text-xs text-[var(--color-down)]">
+        <p id={errorId} role="alert" className="m-0 text-meta text-[var(--color-down)]">
           {error}
         </p>
       )}
       {hint && (
-        <p id={hintId} className="m-0 text-xs text-[var(--text-muted)]">
+        <p id={hintId} className="m-0 text-meta text-[var(--text-muted)]">
           {hint}
         </p>
       )}
@@ -55,12 +56,19 @@ export function Field({ label, hint, error, className, children }: FieldProps) {
   )
 }
 
-/** 입력·선택 공통 외형. 컨트롤마다 복사하면 하나만 어긋난다. */
+/**
+ * 입력·선택 공통 외형. 컨트롤마다 복사하면 하나만 어긋난다.
+ *
+ * 높이 44px 로 못박는다 — 같은 줄의 lg 버튼과 가운데가 맞아야 한다. 포커스
+ * 링은 `@layer base` 의 `:focus-visible` 이 전역으로 그린다. 휴대폰에서는
+ * 글자를 16px 아래로 내리지 않는다(iOS 가 포커스 때 화면을 확대한다).
+ */
 export const CONTROL_CLASS = `
-  w-full rounded-[var(--radius-md)] border border-[var(--border-strong)]
-  bg-[var(--surface-raised)] px-[var(--spacing-3)] py-[var(--spacing-2)]
-  text-sm text-[var(--text-primary)]
+  h-[2.75rem] w-full rounded-none border border-[var(--border-strong)]
+  bg-[var(--surface-raised)] px-[var(--spacing-3)]
+  text-lead text-[var(--text-primary)] md:text-body
   transition-colors duration-[var(--duration-fast)]
-  hover:enabled:border-[var(--accent)]
-  disabled:cursor-not-allowed disabled:bg-[var(--surface-sunken)] disabled:opacity-60
+  hover:enabled:border-[var(--text-primary)]
+  disabled:cursor-not-allowed disabled:border-[var(--border-subtle)]
+  disabled:bg-[var(--surface-sunken)] disabled:text-[var(--text-muted)]
 `

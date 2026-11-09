@@ -1,105 +1,108 @@
 /* ===========================================================================
  * 디자인 토큰 — 단일 소스
  *
- * 규칙(계획 §12-1): 색·간격·radius·shadow 값은 **이 파일 밖에 존재하지 않는다.**
+ * 규칙: 색·간격·radius·shadow·글꼴 값은 **이 파일 밖에 존재하지 않는다.**
  * 컴포넌트에 hex 코드나 px 값을 직접 쓰지 않는다. 이전 Streamlit 버전에서
- * styles.py 가 829줄까지 자란 이유가 값의 산재였다.
- *
- * 위반은 `tokens.test.ts` 가 잡는다.
+ * styles.py 가 829줄까지 자란 이유가 값의 산재였다. 위반은 `tokens.test.ts` 가 잡는다.
  *
  * ---------------------------------------------------------------------------
- * 방향: Squarespace 계열 (ko.squarespace.com)
+ * 방향 — 브랜드 계약은 저장소 루트의 DESIGN.md(open-design `tom-modern` 의 한국어
+ * 적응)이고, 이 파일은 그 **컴파일된 바인딩**이다. 둘이 어긋나면 이 파일을 고친다.
+ * 설계 근거: docs/superpowers/specs/2026-11-09-open-design-refresh-design.md §3.
  *
- * 네 가지가 그 사이트의 골격이다.
- *
- * 1. **거의 무채색.** 흰 지면, 아주 옅은 회색 띠, 새까만 글자. 색은 링크와
- *    선택 상태에만 쓴다. 색이 적을수록 숫자가 잘 보인다 — 이 앱은 화면의
- *    대부분이 표와 지표라 특히 그렇다.
- * 2. **주 행동은 검은 알약 버튼.** 한 화면에 이 버튼은 하나다. 무엇을 눌러야
- *    하는지 헤맬 일이 없다.
- * 3. **그림자가 아니라 헤어라인.** 카드를 띄우지 않고 선으로만 나눈다.
- * 4. **표제가 크다.** 지금까지 화면에서 가장 큰 글자가 18px 이라 무엇이
- *    표제인지 알 수 없었다.
- *
- * 색이 둘로 나뉘는 이유: `--action-*` 은 **누르는 것**(검정), `--accent` 는
- * **가리키는 것**(딥그린 — 링크·선택·현재 단계)이다. 하나로 합치면 검은
- * 배경 위 검은 강조가 되거나, 화면 곳곳이 초록 버튼으로 뒤덮인다.
+ * 1. **중립 지면 위의 잉크.** 거의 흰 지면(따뜻하지 않다)에 30px 격자가 옅게
+ *    깔리고 그 위에 흰 프레임이 선다. 사진·그라데이션·세리프 표제·장식 아이콘이
+ *    없다. 글꼴은 둘 — 글은 Pretendard, 숫자·연도·순위·코드는 Geist Mono. 둘 다
+ *    저장소에 번들돼 있다(CDN 없음).
+ * 2. **주홍 하나.** `--accent` 는 CTA 가 아니라 **가리키는 것**(현재 단계, 기준
+ *    연도, 대상 행, 표제의 한 단어)에만 쓴다. 화면 한 장에 두 군데까지. 18px
+ *    미만 글자에는 어둡게 깎은 `--accent-text` 를 쓴다 — 주홍 원색은 작은 글자에서
+ *    AA 에 미달한다. 대비는 눈대중이 아니라 `tokens.test.ts` 가 계산한다.
+ * 3. **누르는 것과 가리키는 것을 나눈다.** `--action-*` 은 누르는 검은 사각(한
+ *    화면에 하나), `--accent` 는 가리키는 주홍. 선택된 연도 칩은 잉크 채움이지
+ *    주홍이 아니다.
+ * 4. **모서리 0, 그림자는 하드 오프셋.** 알약·둥근 카드가 없다. 깊이는 1px 선과
+ *    `4px 4px 0` / `8px 8px 0` 의 오프셋 그림자가 만든다. 블러 그림자는 없다
+ *    (상단바의 blur 하나가 예외).
+ * 5. **타입 크기는 토큰 9개가 전부다.** display·title·heading·lead·body·meta·
+ *    eyebrow·kpi·kpi-sub. Tailwind 기본 `text-sm` 류를 쓰지 않는다 — 크기가 늘면
+ *    위계가 사라진다. 한글 표제는 자간 -0.01em 까지, 행간은 1.3 아래로 내리지
+ *    않는다(한글은 em 박스를 꽉 채워 라틴 값으로 두면 줄이 닿는다).
  * =========================================================================== */
 
 @import 'tailwindcss';
 
 @theme {
-  /* --- 잉크(무채색) -------------------------------------------------------
-   * 순수 검정 대신 아주 살짝 눌러 쓴다. #000 은 흰 바탕에서 대비가 과해
-   * 긴 글을 읽을 때 눈이 피로하다. */
-  --color-ink-0: #ffffff;
-  --color-ink-50: #fafafa;
-  --color-ink-100: #f4f4f4;
-  --color-ink-200: #e6e6e6;
-  --color-ink-300: #d2d2d2;
-  --color-ink-400: #a8a8a8;
-  --color-ink-500: #7a7a7a;
-  --color-ink-600: #565656;
-  --color-ink-700: #3a3a3a;
-  --color-ink-800: #222222;
-  --color-ink-900: #101010;
+  /* --- 글꼴 -------------------------------------------------------------------
+   * 둘 다 저장소에 번들돼 있다(public/fonts, scripts/build_fonts.py). CDN 없음.
+   * 'Pretendard Fallback' 은 파일이 아니라 Malgun Gothic 을 Pretendard 의 글자 폭에
+   * 맞춘 size-adjust 선언이다(fonts.css) — 글꼴이 늦게 오는 동안 줄바꿈이 튀지 않는다. */
+  --font-sans:
+    'Pretendard Variable', 'Pretendard Fallback', 'Malgun Gothic', 'Apple SD Gothic Neo',
+    system-ui, sans-serif;
+  /* 숫자·연도·순위·건수·코드·파일명·키 전용. 라틴만 서브셋했으므로 한글이 섞인
+   * 자리에서는 브라우저가 Pretendard 로 떨어진다 — 문장 안의 숫자에는 걸지 않는다. */
+  --font-mono: 'Geist Mono', ui-monospace, Consolas, 'D2Coding', monospace;
+  --font-numeric: var(--font-mono);
 
-  /* --- 강조: 딥그린 -------------------------------------------------------
-   * 링크·선택·현재 단계에만 쓴다. 무채색 지면에서 한 가지 색만 살아 있으면
-   * 그 색이 곧 "여기를 보라" 가 된다. */
-  --color-brand-50: #eef6f2;
-  --color-brand-100: #d5e9e0;
-  --color-brand-200: #a9d3c2;
-  --color-brand-300: #74b69f;
-  --color-brand-400: #43977c;
-  --color-brand-500: #1f7a5f;
-  --color-brand-600: #16624b;
-  --color-brand-700: #114d3b;
-  --color-brand-800: #0d3b2d;
-  --color-brand-900: #092b20;
+  /* --- 타입 스케일(9개) -----------------------------------------------------
+   * display 는 홈 h1 하나, title 은 단계 h2 — 둘만 700. eyebrow 는 구획 라벨·단계
+   * 번호·메타 띠(아래 @utility eyebrow 가 굵기·자간을 묶는다). kpi 는 2단계
+   * "답 하나"(전국순위), kpi-sub 는 나머지 지표 — 둘은 Geist Mono 로 그린다. */
+  --text-display: clamp(2.25rem, 1.4rem + 3.4vw, 3.75rem);
+  --text-display--line-height: 1.3;
+  --text-display--letter-spacing: -0.01em;
+  --text-title: clamp(1.5rem, 1.3rem + 0.8vw, 1.75rem);
+  --text-title--line-height: 1.3;
+  --text-title--letter-spacing: -0.01em;
+  --text-heading: 1rem;
+  --text-heading--line-height: 1.4;
+  --text-lead: 1.0625rem;
+  --text-lead--line-height: 1.65;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.6;
+  /* meta(12px)는 muted 잉크와만 짝지어 쓴다. 대비는 tokens.test 가 잰다. */
+  --text-meta: 0.75rem;
+  --text-meta--line-height: 1.5;
+  --text-meta--letter-spacing: 0.01em;
+  --text-eyebrow: 0.75rem;
+  --text-eyebrow--line-height: 1;
+  --text-eyebrow--letter-spacing: 0.08em;
+  --text-kpi: 2.25rem;
+  --text-kpi--line-height: 1.05;
+  --text-kpi--letter-spacing: -0.02em;
+  --text-kpi-sub: 1.5rem;
+  --text-kpi-sub--line-height: 1.1;
+  --text-kpi-sub--letter-spacing: -0.01em;
 
-  /* --- 의미색: 지표 증감 --------------------------------------------------
+  /* --- 의미색: 지표 증감 -------------------------------------------------------
    * V09 가 났던 지점이다. 규약을 여기서 못박는다.
    *   up   = 개선(순위 상승, 실적 증가)
    *   down = 악화
    * 한국 관행상 상승이 붉은색인 경우도 있으나, 이 앱은 "개선=긍정색" 으로
-   * 통일한다. 색만으로 구분하지 않고 화살표와 라벨을 항상 함께 쓴다. */
-  --color-up: #1f7a5f;
-  --color-up-soft: #eef6f2;
-  --color-down: #b3261e;
-  --color-down-soft: #fceceb;
-  --color-neutral: #565656;
-  --color-neutral-soft: #f4f4f4;
+   * 통일한다. 색만으로 구분하지 않고 화살표와 라벨을 항상 함께 쓴다.
+   * 다크 값은 아래 테마 블록이 덮어쓴다. */
+  --color-up: #1a7f4b;
+  --color-up-soft: rgb(26 127 75 / 0.1);
+  --color-down: #c8321e;
+  --color-down-soft: rgb(200 50 30 / 0.1);
+  --color-neutral: #52525b;
+  --color-neutral-soft: rgb(82 82 91 / 0.1);
 
-  /* --- 타이포그래피 -------------------------------------------------------
-   * Pretendard 는 로컬 번들이다(오프라인 설치본 대응). 폰트 파일을 넣기
-   * 전까지는 시스템 한글 폰트로 폴백한다. */
-  --font-sans: 'Pretendard Variable', Pretendard, 'Malgun Gothic', -apple-system,
-    BlinkMacSystemFont, system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'D2Coding', ui-monospace, monospace;
+  /* --- 차트 -----------------------------------------------------------------
+   * 서버 PNG 는 흰 배경이다. 다크에서도 그대로 흰 매트 위에 올린다 — 투명 처리나
+   * 반전을 하면 Word 문서와 다른 그림을 검토하게 된다. 테마와 무관하므로 한 곳. */
+  --chart-matte: #ffffff;
+  /* core/chart_generator.py 의 figsize 비율. 그림이 오기 전 자리를 예약해
+   * 레이아웃이 튀지 않게 한다. */
+  --chart-aspect-trend: 9 / 5;
+  --chart-aspect-bar: 2 / 1;
+  --chart-aspect-avg: 2 / 1;
+  --chart-aspect-rank: 12 / 5;
+  --chart-aspect-compare: 8 / 5;
 
-  /* --- 타입 스케일 --------------------------------------------------------
-   * 표제는 `clamp` 로 화면 폭에 따라 줄인다. 고정 3.5rem 을 쓰면 400px
-   * 화면에서 한 단어가 한 줄을 차지한다. */
-  --text-display: clamp(2.25rem, 1.2rem + 4.4vw, 3.75rem);
-  --text-display--line-height: 1.08;
-  --text-display--letter-spacing: -0.03em;
-  --text-title: clamp(1.5rem, 1.1rem + 1.6vw, 2.125rem);
-  --text-title--line-height: 1.2;
-  --text-title--letter-spacing: -0.02em;
-  --text-heading: 1.125rem;
-  --text-heading--line-height: 1.4;
-  --text-heading--letter-spacing: -0.01em;
-  --text-eyebrow: 0.6875rem;
-  --text-eyebrow--line-height: 1.2;
-  --text-eyebrow--letter-spacing: 0.12em;
-  --text-metric: clamp(1.75rem, 1.4rem + 1.4vw, 2.5rem);
-  --text-metric--line-height: 1.05;
-  --text-metric--letter-spacing: -0.03em;
-  --text-lead: 1.0625rem;
-  --text-lead--line-height: 1.65;
-
-  /* --- 간격 (4px 스케일, 넉넉한 구간 리듬) --------------------------------- */
+  /* --- 간격 (4px 스케일) -----------------------------------------------------
+   * 한 묶음 안 8–12px, 묶음 사이 32–48px. 간격이 곧 그룹이다. */
   --spacing-1: 0.25rem;
   --spacing-2: 0.5rem;
   --spacing-3: 0.75rem;
@@ -111,22 +114,33 @@
   --spacing-9: 6rem;
   --spacing-10: 8rem;
 
-  /* --- 모서리 ------------------------------------------------------------
-   * 버튼은 알약, 면은 거의 각지게. 둘을 섞으면 "버튼" 이라는 신호가 세진다. */
-  --radius-sm: 0.25rem;
-  --radius-md: 0.375rem;
-  --radius-lg: 0.5rem;
-  --radius-xl: 0.75rem;
-  --radius-full: 9999px;
+  /* --- 모서리 ---------------------------------------------------------------
+   * 전부 0. 알약 버튼·둥근 칩·둥근 카드가 모두 직각이 된다 — 이것이 tom-modern 의
+   * 실루엣이다. 컴포넌트는 토큰만 참조하므로 값 하나로 실루엣이 정해진다. 이름을
+   * 남겨 두는 이유는 호출부(rounded-[var(--radius-md)] 류)를 전부 지우지 않기
+   * 위해서다. */
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-full: 0px;
 
-  /* --- 모션 ---------------------------------------------------------------
-   * 짧고 절제된 것만. 화면이 움직여서 좋은 것은 상태가 바뀌었다는 신호뿐이다. */
-  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  /* --- 모션 -----------------------------------------------------------------
+   * 움직이는 것은 상태 변화뿐 — 버튼 호버의 그림자 등장(fast), 누름(translate 1px),
+   * 단계 전환 포커스, 펜딩 블록. 스크롤 리빌·등장 애니메이션은 없다. */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --duration-fast: 120ms;
   --duration-base: 200ms;
   --duration-slow: 320ms;
 
-  /* --- 레이아웃 ------------------------------------------------------------ */
+  /* --- 레이아웃 ---------------------------------------------------------------
+   * 고정 막대의 높이는 토큰이다. 스크롤 패딩(아래 html)과 sticky 오프셋이 같은
+   * 값을 봐야 포커스된 요소가 막대 뒤에 숨지 않는다. 격자 간격은 테마와 무관하다
+   * (선 색만 테마 블록이 바꾼다). */
+  --grid-size: 30px;
+  --appbar-h: 3.5rem;
+  --contextbar-h: 2.5rem;
+  --actionbar-h: 3.5rem;
   --container-content: 72rem;
   --container-prose: 44rem;
 }
@@ -134,8 +148,8 @@
 /* ===========================================================================
  * 테마: 라이트 / 다크
  *
- * 다크모드는 색 반전이 아니라 **토큰 세트 교체**다(계획 §4).
- * 순수 검정(#000)은 쓰지 않는다 — 대비가 과해 눈이 피로하다.
+ * 다크모드는 색 반전이 아니라 **같은 역할의 다른 값**이다. 순수 검정은 쓰지
+ * 않는다 — 대비가 과해 눈이 피로하다. 양쪽 모두 중립 회색이다(따뜻하지 않다).
  *
  * 다크 토큰 블록이 **둘**인 이유: 사용자가 고른 경우(`[data-theme='dark']`)와
  * OS 설정을 따르는 경우(`prefers-color-scheme`)를 CSS 로 한 블록에 합칠 수
@@ -146,114 +160,93 @@
 :root {
   color-scheme: light;
 
-  --surface-base: #ffffff;
+  /* 지면. 거의 흰 중립 위에 30px 격자(아래 body)가 깔리고 흰 프레임이 선다.
+     raised 와 base 의 차이가 프레임의 깊이다 — 그림자가 아니라 선이 만든다. */
+  --surface-base: #fafafa;
   --surface-raised: #ffffff;
-  --surface-sunken: #f4f4f4;
-  --surface-overlay: rgb(255 255 255 / 0.9);
-  --surface-accent: #fafafa;
-  /* 짙은 띠. 한 페이지에 한 번만 쓴다 — 여러 번 쓰면 리듬이 아니라 얼룩이다. */
-  --surface-inverse: #101010;
+  --surface-sunken: #f1f1f3;
+  /* 교대 구획(쓰임 띠). 반투명이라 격자가 비친다. */
+  --surface-alt: rgb(255 255 255 / 0.72);
+  /* 예비. 한 페이지에 한 번 이하. */
+  --surface-inverse: #27272a;
 
-  --border-subtle: #e6e6e6;
-  --border-strong: #d2d2d2;
+  --border-subtle: #d4d4d8;
+  --border-strong: #8f8f8f;
 
-  --text-primary: #101010;
-  --text-secondary: #565656;
-  --text-muted: #7a7a7a;
+  /* 잉크. muted 는 12px 캡션 전용이라 raised·sunken 바탕 모두 4.5:1 을 넘겨야
+     한다(tokens.test 가 잰다). */
+  --text-primary: #27272a;
+  --text-secondary: #52525b;
+  --text-muted: #696971;
   --text-on-action: #ffffff;
   --text-on-inverse: #fafafa;
 
-  /* 가리키는 색 — 링크·선택·현재 단계 */
-  --accent: var(--color-brand-500);
-  --accent-hover: var(--color-brand-700);
-  --accent-soft: var(--color-brand-50);
+  /* 주홍. 면·선·밑줄·포커스·강조 단어(24px 이상 700)에만 — 흰 바탕 약 3.5:1 이라
+     큰 글자 한정. 18px 미만 글자(링크·"신규")는 어둡게 깎은 accent-text 가 맡는다. */
+  --accent: #ee5400;
+  --accent-hover: #d44a00;
+  --accent-soft: rgb(238 84 0 / 0.08);
+  --accent-text: #b43c00;
 
   /* 누르는 색 — 주 행동 버튼. 한 화면에 하나. */
-  --action-bg: #101010;
-  --action-bg-hover: #3a3a3a;
+  --action-bg: #27272a;
+  --action-bg-hover: #3f3f46;
 
-  --focus-ring: var(--color-brand-500);
+  --focus-ring: #ee5400;
 
-  /* 그림자는 거의 쓰지 않는다. 깊이는 헤어라인이 만든다. */
-  /* 히어로 스크림. 사진 위에 흰 글자를 올리려면 대비를 사진에 맡길 수 없다 —
-     사진의 밝은 쪽이 걸리면 글자가 사라진다. 히어로는 테마와 무관하게 늘
-     어두우므로 라이트·다크가 같은 값이다. */
-  --scrim-hero: linear-gradient(
-    100deg,
-    rgb(0 0 0 / 0.82) 0%,
-    rgb(0 0 0 / 0.62) 45%,
-    rgb(0 0 0 / 0.25) 100%
-  );
-  --scrim-hero-glow: radial-gradient(
-    70% 90% at 88% 15%,
-    rgb(255 255 255 / 0.12),
-    transparent 65%
-  );
-  /* 좁은 띠 구간용. 히어로보다 약하게 덮는다. */
-  --scrim-band: linear-gradient(90deg, rgb(0 0 0 / 0.78) 0%, rgb(0 0 0 / 0.45) 100%);
-  --shadow-sm: 0 1px 2px rgb(16 16 16 / 0.05);
-  --shadow-md: 0 2px 10px rgb(16 16 16 / 0.07);
-  --shadow-lg: 0 10px 34px rgb(16 16 16 / 0.12);
+  /* 깊이는 하드 오프셋. soft 는 프레임 기본, hard 는 호버·모달·드롭다운. 블러 없음. */
+  --shadow-soft: 4px 4px 0 rgb(150 150 150 / 0.10);
+  --shadow-hard: 8px 8px 0 rgb(150 150 150 / 0.12);
+  /* 모달 뒤를 덮는 막. 잉크색을 옅게 — 뒤 화면이 "잠겼다" 는 신호면 충분하다. */
+  --surface-scrim: rgb(39 39 42 / 0.45);
+
+  /* body 격자의 선 색. 간격은 @theme 의 grid-size. */
+  --grid-line: rgb(150 150 150 / 0.04);
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --surface-base: #121212;
-  --surface-raised: #1a1a1a;
-  --surface-sunken: #0d0d0d;
-  --surface-overlay: rgb(18 18 18 / 0.9);
-  --surface-accent: #1a1a1a;
-  --surface-inverse: #fafafa;
+  --surface-base: #131316;
+  --surface-raised: #1b1b1f;
+  --surface-sunken: #0e0e11;
+  --surface-alt: rgb(27 27 31 / 0.72);
+  --surface-inverse: #f4f4f5;
 
-  --border-subtle: #2a2a2a;
-  --border-strong: #3d3d3d;
+  --border-subtle: #2e2e34;
+  --border-strong: #52525b;
 
-  --text-primary: #f4f4f4;
-  --text-secondary: #b0b0b0;
-  --text-muted: #8a8a8a;
-  /* 어두운 테마에서 주 행동 버튼은 **반전된다** — 흰 알약에 검은 글자.
-     Squarespace 의 다크 구간이 그렇게 생겼고, 어두운 지면에서 검은 버튼은
-     보이지도 않는다. */
-  --text-on-action: #101010;
-  --text-on-inverse: #101010;
+  --text-primary: #f4f4f5;
+  --text-secondary: #b4b4bc;
+  --text-muted: #8f8f98;
+  /* 어두운 지면에서 주 행동 버튼은 **반전된다** — 밝은 사각에 어두운 글자.
+     어두운 지면에서 검은 버튼은 보이지도 않는다. */
+  --text-on-action: #131316;
+  --text-on-inverse: #131316;
 
-  --accent: var(--color-brand-300);
-  --accent-hover: var(--color-brand-200);
-  --accent-soft: rgb(116 182 159 / 0.14);
+  --accent: #ff7a33;
+  --accent-hover: #ff9459;
+  --accent-soft: rgb(255 122 51 / 0.14);
+  --accent-text: #ff8a4d;
 
-  --action-bg: #fafafa;
-  --action-bg-hover: #d2d2d2;
+  --action-bg: #f4f4f5;
+  --action-bg-hover: #d4d4d8;
 
-  --focus-ring: var(--color-brand-300);
+  --focus-ring: #ff7a33;
 
-  /* 히어로 스크림. 사진 위에 흰 글자를 올리려면 대비를 사진에 맡길 수 없다 —
-     사진의 밝은 쪽이 걸리면 글자가 사라진다. 히어로는 테마와 무관하게 늘
-     어두우므로 라이트·다크가 같은 값이다. */
-  --scrim-hero: linear-gradient(
-    100deg,
-    rgb(0 0 0 / 0.82) 0%,
-    rgb(0 0 0 / 0.62) 45%,
-    rgb(0 0 0 / 0.25) 100%
-  );
-  --scrim-hero-glow: radial-gradient(
-    70% 90% at 88% 15%,
-    rgb(255 255 255 / 0.12),
-    transparent 65%
-  );
-  /* 좁은 띠 구간용. 히어로보다 약하게 덮는다. */
-  --scrim-band: linear-gradient(90deg, rgb(0 0 0 / 0.78) 0%, rgb(0 0 0 / 0.45) 100%);
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5);
-  --shadow-md: 0 4px 12px rgb(0 0 0 / 0.55);
-  --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.6);
+  --shadow-soft: 4px 4px 0 rgb(0 0 0 / 0.5);
+  --shadow-hard: 8px 8px 0 rgb(0 0 0 / 0.55);
+  --surface-scrim: rgb(0 0 0 / 0.6);
+
+  --grid-line: rgb(255 255 255 / 0.035);
 
   /* 증감색은 어두운 배경에서 채도를 낮춰야 눈이 편하다 */
-  --color-up: #74b69f;
-  --color-up-soft: rgb(116 182 159 / 0.16);
-  --color-down: #f2837c;
-  --color-down-soft: rgb(242 131 124 / 0.16);
-  --color-neutral: #a8a8a8;
-  --color-neutral-soft: rgb(168 168 168 / 0.14);
+  --color-up: #5fbf8a;
+  --color-up-soft: rgb(95 191 138 / 0.16);
+  --color-down: #ff8a7a;
+  --color-down-soft: rgb(255 138 122 / 0.16);
+  --color-neutral: #b4b4bc;
+  --color-neutral-soft: rgb(180 180 188 / 0.16);
 }
 
 /* 사용자가 테마를 고르지 않았으면 OS 설정을 따른다.
@@ -262,93 +255,130 @@
   :root:not([data-theme='light']) {
     color-scheme: dark;
 
-    --surface-base: #121212;
-    --surface-raised: #1a1a1a;
-    --surface-sunken: #0d0d0d;
-    --surface-overlay: rgb(18 18 18 / 0.9);
-    --surface-accent: #1a1a1a;
-    --surface-inverse: #fafafa;
+    --surface-base: #131316;
+    --surface-raised: #1b1b1f;
+    --surface-sunken: #0e0e11;
+    --surface-alt: rgb(27 27 31 / 0.72);
+    --surface-inverse: #f4f4f5;
 
-    --border-subtle: #2a2a2a;
-    --border-strong: #3d3d3d;
+    --border-subtle: #2e2e34;
+    --border-strong: #52525b;
 
-    --text-primary: #f4f4f4;
-    --text-secondary: #b0b0b0;
-    --text-muted: #8a8a8a;
-    --text-on-action: #101010;
-    --text-on-inverse: #101010;
+    --text-primary: #f4f4f5;
+    --text-secondary: #b4b4bc;
+    --text-muted: #8f8f98;
+    --text-on-action: #131316;
+    --text-on-inverse: #131316;
 
-    --accent: var(--color-brand-300);
-    --accent-hover: var(--color-brand-200);
-    --accent-soft: rgb(116 182 159 / 0.14);
+    --accent: #ff7a33;
+    --accent-hover: #ff9459;
+    --accent-soft: rgb(255 122 51 / 0.14);
+    --accent-text: #ff8a4d;
 
-    --action-bg: #fafafa;
-    --action-bg-hover: #d2d2d2;
+    --action-bg: #f4f4f5;
+    --action-bg-hover: #d4d4d8;
 
-    --focus-ring: var(--color-brand-300);
+    --focus-ring: #ff7a33;
 
-    /* 히어로 스크림. 사진 위에 흰 글자를 올리려면 대비를 사진에 맡길 수 없다 —
-       사진의 밝은 쪽이 걸리면 글자가 사라진다. 히어로는 테마와 무관하게 늘
-       어두우므로 라이트·다크가 같은 값이다. */
-    --scrim-hero: linear-gradient(
-      100deg,
-      rgb(0 0 0 / 0.82) 0%,
-      rgb(0 0 0 / 0.62) 45%,
-      rgb(0 0 0 / 0.25) 100%
-    );
-    --scrim-hero-glow: radial-gradient(
-      70% 90% at 88% 15%,
-      rgb(255 255 255 / 0.12),
-      transparent 65%
-    );
-    /* 좁은 띠 구간용. 히어로보다 약하게 덮는다. */
-    --scrim-band: linear-gradient(90deg, rgb(0 0 0 / 0.78) 0%, rgb(0 0 0 / 0.45) 100%);
-    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5);
-    --shadow-md: 0 4px 12px rgb(0 0 0 / 0.55);
-    --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.6);
+    --shadow-soft: 4px 4px 0 rgb(0 0 0 / 0.5);
+    --shadow-hard: 8px 8px 0 rgb(0 0 0 / 0.55);
+    --surface-scrim: rgb(0 0 0 / 0.6);
 
-    --color-up: #74b69f;
-    --color-up-soft: rgb(116 182 159 / 0.16);
-    --color-down: #f2837c;
-    --color-down-soft: rgb(242 131 124 / 0.16);
-    --color-neutral: #a8a8a8;
-    --color-neutral-soft: rgb(168 168 168 / 0.14);
+    --grid-line: rgb(255 255 255 / 0.035);
+
+    --color-up: #5fbf8a;
+    --color-up-soft: rgb(95 191 138 / 0.16);
+    --color-down: #ff8a7a;
+    --color-down-soft: rgb(255 138 122 / 0.16);
+    --color-neutral: #b4b4bc;
+    --color-neutral-soft: rgb(180 180 188 / 0.16);
   }
 }
 
 /* ===========================================================================
  * 기본 스타일
+ *
+ * `@layer base` 안에 둔다. 레이어 밖의 규칙은 Tailwind 유틸리티(utilities 레이어)
+ * 보다 언제나 세다 — `p { text-wrap: pretty }` 를 밖에 두었더니 `text-wrap` 이
+ * `white-space` 의 하위 속성이라 `.truncate` 의 nowrap 을 덮어써서, 컨텍스트 바가
+ * 휴대폰에서 두 줄로 접혀 잘렸다. 기본값은 기본값답게 유틸리티에 진다.
  * =========================================================================== */
 
-* {
-  box-sizing: border-box;
-}
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
 
-body {
-  margin: 0;
-  background: var(--surface-base);
-  color: var(--text-primary);
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
-  /* 한글은 단어 중간에서 줄바꿈되면 읽기 나쁘다 */
-  word-break: keep-all;
-  overflow-wrap: anywhere;
+  html {
+    /* 앵커 이동·포커스 스크롤이 고정 막대 뒤에 숨지 않게 한다. 값은 위 토큰과 같다. */
+    scroll-padding-top: calc(var(--appbar-h) + var(--contextbar-h));
+    scroll-padding-bottom: var(--actionbar-h);
+  }
+
+  body {
+    margin: 0;
+    color: var(--text-primary);
+    /* 30px 격자. 두 방향 1px 선을 지면 위에 깐다 — 선 색은 테마 블록, 간격은
+       @theme 가 정한다. 교대 구획은 surface-alt 로 덮어 격자를 옅게 비친다. */
+    background-color: var(--surface-base);
+    background-image:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: var(--grid-size) var(--grid-size);
+    font-family: var(--font-sans);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    /* 한글은 단어 중간에서 줄바꿈되면 읽기 나쁘다. 글자 단위 강제 줄바꿈
+       (anywhere 류)은 쓰지 않는다 — 좁은 화면에서 표 머리글과 상단바를 한 자씩
+       쪼갰다. 넘치는 표는 가로 스크롤 영역이 맡는다. */
+    word-break: keep-all;
+  }
+
+  /* 표제는 줄 길이를 고르게, 본문은 외톨이 단어를 피한다. 지원하지 않는
+     브라우저는 무시한다. */
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  /* 키보드 사용자에게만 포커스 링을 보여준다. 2px 주홍 — 이것도 "가리키는" 주홍이다. */
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
 }
 
 /* 숫자는 표에서 자릿수가 맞아야 비교가 된다. 폰트를 바꾸지 않고
    같은 폭의 숫자 글리프만 쓴다 — 한글과 섞여도 어색하지 않다. */
-.tabular {
+@utility tabular {
   font-variant-numeric: tabular-nums;
 }
 
-/* 키보드 사용자에게만 포커스 링을 보여준다 */
-:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
+/* 아이브로 — 구획 라벨·단계 번호·표 머리글·메타 띠. tom-modern 의 핵심 장치다.
+   짧은 한국어 명사("자료 현황")와 숫자("01", "2016–2026")만 쓴다. 라틴 대문자
+   라벨은 쓰지 않는다 — 쓸 말이 없다. 색은 호출부가 정한다(보통 text-secondary). */
+@utility eyebrow {
+  font-size: var(--text-eyebrow);
+  line-height: 1;
+  letter-spacing: 0.08em;
+  font-weight: 600;
 }
 
-/* 모션을 줄이겠다고 한 사용자에게는 애니메이션을 없앤다.
- * 홈 3D 히어로도 이 설정을 존중한다(계획 §5). */
+/* 숫자·연도·순위 아이브로. 모노는 라틴만 있으므로 한글이 섞인 자리에는 걸지 않는다. */
+@utility eyebrow-mono {
+  font-size: var(--text-eyebrow);
+  line-height: 1;
+  letter-spacing: 0.08em;
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+/* 모션을 줄이겠다고 한 사용자에게는 애니메이션을 없앤다. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

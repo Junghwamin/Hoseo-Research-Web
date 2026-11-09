@@ -426,9 +426,9 @@ def test_doc_u07_trend_table_shading_and_formats(fixed_date):
     document = _reopen(_build())
     table = document.tables[0]
 
-    assert [_cell_fill(c) for c in table.rows[0].cells] == ["2E75B6"] * 6, "헤더 배경색"
-    assert [_cell_fill(row.cells[0]) for row in table.rows] == ["2E75B6", "D6E4F0", "FFFFFF"], (
-        "짝수 데이터 행 D6E4F0, 홀수 행 FFFFFF 줄무늬(zebra striping)"
+    assert [_cell_fill(c) for c in table.rows[0].cells] == ["27272A"] * 6, "헤더 배경색(잉크)"
+    assert [_cell_fill(row.cells[0]) for row in table.rows] == ["27272A", "F4F4F5", "FFFFFF"], (
+        "짝수 데이터 행 F4F4F5, 홀수 행 FFFFFF 줄무늬(zebra striping)"
     )
 
     assert [c.text for c in table.rows[0].cells] == [
@@ -449,12 +449,12 @@ def test_doc_u07_trend_table_header_reflects_region_name(fixed_date):
 
 
 def test_doc_u07_compare_table_highlights_target_university(fixed_date):
-    """DOC-U07: 비교군 표에서 대상 대학 행만 FFF2CC 배경 + 굵게(bold) 강조된다."""
+    """DOC-U07: 비교군 표에서 대상 대학 행만 FFE8DC 배경 + 굵게(bold) 강조된다."""
     document = _reopen(_build(university="호서대학교"))
     table = document.tables[1]
 
     assert [_cell_fill(row.cells[0]) for row in table.rows] == [
-        "2E75B6", "FFF2CC", "FFFFFF", "D6E4F0"
+        "27272A", "FFE8DC", "FFFFFF", "F4F4F5"
     ], "0번 데이터 행(호서)은 강조색, 나머지는 zebra"
 
     bolds = [row.cells[0].paragraphs[0].runs[0].bold for row in table.rows[1:]]
@@ -462,12 +462,12 @@ def test_doc_u07_compare_table_highlights_target_university(fixed_date):
 
 
 def test_doc_u07_highlight_follows_university_argument(fixed_date):
-    """DOC-U07: university 인자를 바꾸면 강조 행(FFF2CC + bold)이 그 대학으로 이동한다."""
+    """DOC-U07: university 인자를 바꾸면 강조 행(FFE8DC + bold)이 그 대학으로 이동한다."""
     document = _reopen(_build(university="한서대학교"))
     table = document.tables[1]
 
     fills = [_cell_fill(row.cells[0]) for row in table.rows]
-    assert fills == ["2E75B6", "D6E4F0", "FFFFFF", "FFF2CC"], f"강조가 이동하지 않았다: {fills}"
+    assert fills == ["27272A", "F4F4F5", "FFFFFF", "FFE8DC"], f"강조가 이동하지 않았다: {fills}"
 
     bolds = [row.cells[0].paragraphs[0].runs[0].bold for row in table.rows[1:]]
     assert bolds == [False, False, True]
@@ -485,6 +485,33 @@ def test_doc_u07_compare_table_number_formats(fixed_date):
         "호서대학교", "1,234명", "302.50편", "0.2451", "45위", "3위"
     ]
     assert table.rows[3].cells[5].text == "-", "권역순위 None → '-'"
+
+
+# ===========================================================================
+# DOC-U08: 제목 밑선·표지 색 (open-design 리프레시)
+# ===========================================================================
+
+def test_doc_u08_section_heading_has_accent_rule(fixed_date):
+    """DOC-U08: 섹션 제목 단락 아래에 주홍(EE5400) 단일선 테두리가 있다.
+
+    `w:pBdr` 는 스키마 순서상 `w:spacing` 앞에 와야 Word 가 복구 없이 연다.
+    """
+    document = _reopen(_build())
+    p = next(p for p in document.paragraphs if p.text.startswith("1. "))
+    bottom = p._p.pPr.find(qn("w:pBdr")).find(qn("w:bottom"))
+    assert bottom.get(qn("w:color")) == "EE5400"
+
+    children = [child.tag for child in p._p.pPr]
+    assert children.index(qn("w:pBdr")) < children.index(qn("w:spacing")), (
+        f"pBdr 가 spacing 뒤에 있으면 Word 가 파일을 복구하려 든다: {children}"
+    )
+
+
+def test_doc_u08_cover_title_is_ink_not_blue(fixed_date):
+    """DOC-U08: 표지 제목은 파랑(1f4e79)이 아니라 잉크(27272A)다."""
+    document = _reopen(_build())
+    run = next(p for p in document.paragraphs if p.text == rb.REPORT_TITLE).runs[0]
+    assert str(run.font.color.rgb) == "27272A"
 
 
 # ===========================================================================

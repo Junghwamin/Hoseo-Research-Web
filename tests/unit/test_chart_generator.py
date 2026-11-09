@@ -1,4 +1,4 @@
-"""chart_generator 단위 테스트 (VIS-U01 ~ VIS-U07).
+"""chart_generator 단위 테스트 (VIS-U01 ~ VIS-U08).
 
 대상: core/chart_generator.py
 
@@ -24,6 +24,8 @@ import matplotlib
 import matplotlib.axes
 import matplotlib.pyplot as plt
 import pytest
+from matplotlib.colors import same_color
+from matplotlib.ft2font import FT2Font
 from PIL import Image
 
 import core.chart_generator as cg
@@ -413,6 +415,50 @@ def test_vis_u06_setup_korean_font_per_os(
     assert fake_fm.added == expected_added, f"{system} 분기 addfont 호출 불일치: {fake_fm.added}"
 
 
+def test_vis_u06b_시스템_나눔이_없으면_번들_폰트를_등록한다(monkeypatch):
+    """VIS-U06b: 서버리스(Vercel)에는 `fonts-nanum` 을 깔 수 없다.
+
+    이 분기가 없으면 예외 없이 **모든 한글이 두부(□)로** 그려진다. 차트는
+    나오고 Word 도 만들어지므로 오류로 보이지 않는다.
+    """
+    system_font = "/usr/share/fonts/truetype/nanum/NanumGothic.ttf"
+
+    class _OnlyBundled:
+        def __init__(self, raw: str):
+            self.raw = raw
+
+        def exists(self) -> bool:
+            return self.raw != system_font
+
+    fake_fm = _FakeFontManagerModule([])
+    monkeypatch.setattr(cg, "_platform", types.SimpleNamespace(system=lambda: "Linux"))
+    monkeypatch.setattr(cg, "_fm", fake_fm)
+    monkeypatch.setattr(cg, "Path", _OnlyBundled)
+
+    with matplotlib.rc_context():
+        cg._setup_korean_font()
+        assert matplotlib.rcParams["font.family"] == ["NanumGothic"]
+
+    assert fake_fm.added == list(cg._BUNDLED_FONTS), f"번들 폰트 등록 불일치: {fake_fm.added}"
+
+
+def test_vis_u06c_번들_폰트가_실제로_한글을_담고_있다():
+    """VIS-U06c: 파일이 있어도 이름이 다르면 matplotlib 이 못 찾고, 글리프가 없으면 두부다.
+
+    `rcParams["font.family"]` 가 찾는 이름과 파일 안의 패밀리 이름이 정확히
+    같아야 한다. 차트 제목이 bold 라 굵은 글꼴도 함께 있어야 한다.
+    """
+    regular, bold = (FT2Font(path) for path in cg._BUNDLED_FONTS)
+
+    assert regular.family_name == bold.family_name == "NanumGothic"
+    assert regular.style_name == "Regular"
+    assert bold.style_name == "Bold"
+
+    for font in (regular, bold):
+        missing = [ch for ch in "호서대학교전임교원논문수권역순위추이" if font.get_char_index(ord(ch)) == 0]
+        assert missing == [], f"{font.fname} 에 없는 글자: {missing}"
+
+
 # ===========================================================================
 # VIS-U07: 대학명 [:-2] 절단
 # ===========================================================================
@@ -463,4 +509,39 @@ def test_vis_u07_truncation_is_harmless_for_plain_names(monkeypatch):
 
     title = records[-1]["axes"].get_title()
     assert title == "2025년 호서대비교군 1인당 SCI/SCOPUS 논문수"
+    assert plt.get_fignums() == []
+
+
+# ===========================================================================
+# VIS-U08: 대상 막대 강조 — 주홍 채움, 해치 없음 (open-design 리프레시)
+# ===========================================================================
+
+def test_vis_u08_target_bar_is_accent_without_hatch(monkeypatch):
+    """VIS-U08: 대상 대학 막대는 주홍(#EE5400) 채움이고 해치(///)가 없다.
+
+    색 아닌 신호는 해치 대신 잉크(#27272A) 1.5px 외곽선과 굵은 눈금 라벨이 맡는다.
+    _regional() 에서 호서대는 1인당논문수가 가장 낮아 정렬 뒤 마지막 막대다 —
+    위치가 아니라 눈금 라벨 텍스트로 찾는다.
+    """
+    records = _capture_subplots(monkeypatch)
+
+    cg.create_comparison_bar(_regional(), 2025, university="호서대학교")
+
+    axes = records[-1]["axes"]
+    labels = axes.get_xticklabels()
+    names = [label.get_text() for label in labels]
+    index = names.index("호서대학교")
+    target = axes.patches[index]
+
+    assert same_color(target.get_facecolor(), "#EE5400"), f"대상 막대 채움: {target.get_facecolor()}"
+    assert target.get_hatch() is None, f"해치가 남아 있다: {target.get_hatch()!r}"
+    assert same_color(target.get_edgecolor(), "#27272A"), f"대상 막대 외곽: {target.get_edgecolor()}"
+    assert target.get_linewidth() == 1.5
+    assert labels[index].get_fontweight() == "bold", "대상 눈금 라벨은 굵게(색 아닌 신호)"
+
+    others = [patch for i, patch in enumerate(axes.patches) if i != index]
+    assert others and all(same_color(p.get_facecolor(), "#D4D4D8") for p in others), (
+        f"기타 막대는 #D4D4D8: {[p.get_facecolor() for p in others]}"
+    )
+    assert all(p.get_hatch() is None for p in others)
     assert plt.get_fignums() == []

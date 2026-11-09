@@ -6,9 +6,9 @@
  *
  * **초기 번들과 지연 청크를 따로 센다.** 둘의 성격이 다르기 때문이다.
  * index.html 이 직접 참조하는 것은 첫 화면이 뜨기 전에 반드시 받아야 하고,
- * `import()` 로 갈라진 청크는 그 기능을 실제로 쓸 때만 받는다. 3D 히어로
- * (three.js 132KB) 를 초기 번들과 같은 저울에 올리면, 정작 지켜야 할
- * "첫 화면이 얼마나 빨리 뜨는가" 를 못 보게 된다.
+ * `import()` 로 갈라진 청크는 그 기능을 실제로 쓸 때만 받는다. 지금은 지연
+ * 청크가 없다(3D 히어로를 지웠다) — 다시 생겼을 때 초기 번들과 같은 저울에
+ * 올려 "첫 화면이 얼마나 빨리 뜨는가" 를 가리지 않도록 구분을 남겨 둔다.
  *
  * 예산을 넘으면 빌드를 실패시킨다. 정당한 증가라면 예산을 **의식적으로** 올린다.
  */
@@ -27,6 +27,8 @@ const BUDGET = {
   initialCss: 20,
   /** 필요할 때만 받는 것. 디스크는 차지하지만 첫 화면을 늦추지 않는다. */
   lazyJs: 200,
+  /** 글꼴 @font-face 선언. 글꼴 파일(woff2)은 글자가 쓰일 때만 받으므로 세지 않는다. */
+  fontCss: 20,
 }
 
 function walk(dir) {
@@ -47,12 +49,18 @@ const referenced = new Set(
   [...html.matchAll(/(?:src|href)="\/?(assets\/[^"]+)"/g)].map((m) => m[1]),
 )
 
-const buckets = { initialJs: [], initialCss: [], lazyJs: [] }
+const buckets = { initialJs: [], initialCss: [], lazyJs: [], fontCss: [] }
 
 for (const file of walk(DIST)) {
   const ext = extname(file)
   if (ext !== '.js' && ext !== '.css') continue
   const rel = file.slice(DIST.length + 1).replace(/\\/g, '/')
+  // 글꼴 CSS 는 @font-face 의 unicode-range 목록이라 크지만 레이아웃과 무관하다.
+  // 레이아웃 CSS 와 같은 저울에 올리면 글꼴 하나 추가에 화면 예산이 터진다.
+  if (rel.startsWith('fonts/')) {
+    buckets.fontCss.push({ rel, kb: gzipKb(file) })
+    continue
+  }
   const isInitial = referenced.has(rel)
   const key = ext === '.css' ? 'initialCss' : isInitial ? 'initialJs' : 'lazyJs'
   buckets[key].push({ rel, kb: gzipKb(file) })
@@ -62,12 +70,13 @@ const LABEL = {
   initialJs: '초기 JS  ',
   initialCss: '초기 CSS ',
   lazyJs: '지연 JS  ',
+  fontCss: '글꼴 CSS ',
 }
 
 let failed = false
 console.log('번들 크기 (gzip)')
 
-for (const key of ['initialJs', 'initialCss', 'lazyJs']) {
+for (const key of ['initialJs', 'initialCss', 'lazyJs', 'fontCss']) {
   const files = buckets[key]
   const total = files.reduce((sum, f) => sum + f.kb, 0)
   const limit = BUDGET[key]
