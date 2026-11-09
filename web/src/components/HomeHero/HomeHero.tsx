@@ -1,166 +1,99 @@
-import { useEffect, useRef, useState } from 'react'
-
-import { decideHeroMode, readEnvironment, type HeroMode } from './capability'
+import type { DatasetInfo } from '../../api/client'
+import { Button } from '../../design/ui'
+import { DataPanel } from './DataPanel'
 
 export interface HomeHeroProps {
-  readonly title: string
-  readonly subtitle: string
-  /** 제목 위 작은 라벨. */
-  readonly eyebrow?: string
-  /**
-   * 배경 사진. **번들된 파일만 쓴다**(`scripts/fetch_media.py` 가 받아 둔다).
-   *
-   * 설치본은 오프라인이라 CDN 주소를 쓰면 히어로가 통째로 빈다.
-   */
-  readonly imageSrc?: string
-  /** 사진 아래에 깔 대체 색. 사진을 못 받으면 이것만 보인다. */
-  readonly children?: React.ReactNode
+  /** `/api/data`. 아직 못 받았으면 null — 패널은 스켈레톤, 띠의 연도 항목은 생략한다. */
+  readonly dataset: DatasetInfo | null
+  /** `/api/data` 를 받지 못한 이유. 패널이 오류와 「다시 시도」를 보인다. */
+  readonly datasetError?: string | null
+  /** 패널의 「다시 시도」. */
+  readonly onRetry?: () => void
+  /** 「분석 시작」(휴대폰 전용). 1단계 입력으로 내려가 포커스를 준다. */
+  readonly onStart: () => void
 }
 
+const EYEBROW = '대학알리미 공시 · 전임교원 연구실적'
+const LEAD =
+  '대학알리미가 공시한 전임교원 1인당 SCI급·SCOPUS 논문 수로 사립대 안에서 우리 대학의 ' +
+  '자리를 확인하고, 권역·비교군과 견준 결과를 그대로 Word 보고서로 내려받습니다.'
+
 /**
- * 진입 화면 히어로.
+ * 진입 화면 히어로 — 활자와 숫자 패널, 2열 비대칭.
  *
- * 3D 는 **장식**이다(계획 §5). 분석 화면은 2D 를 유지해 가독성을 지키고,
- * 여기만 연출한다. 그래서 세 가지를 지킨다.
+ * 왼쪽은 질문 하나(표제)와 자료의 출처·범위, 오른쪽은 「자료 현황」 패널이다
+ * (설계 §4, DESIGN.md §4). 가운데 정렬 히어로·사진·3D 는 없다 — 다른 대학
+ * 캠퍼스 사진은 소속을 오해시키고, 장식 하나에 127KB 를 받은 적이 있다.
  *
- * 1. **글이 먼저다.** 3D 가 실패해도 제목과 설명은 그대로 읽힌다.
- * 2. **지연 로딩.** three.js 는 초기 번들에 들어가지 않는다 — 홈을 실제로
- *    볼 때만 내려받는다. 번들 예산이 빠듯해서만이 아니라, 장식 때문에
- *    분석 화면의 첫 로딩이 느려지면 본말이 전도되기 때문이다.
- * 3. **의심스러우면 포기한다.** reduced-motion·저사양·좁은 화면·WebGL 부재는
- *    전부 정적 대체물로 간다(capability.ts).
+ * 주홍은 여기서 두 군데다: 표제의 「몇 번째」와 패널의 위쪽 띠. 그 밖의 장식
+ * (`hero-static`)은 패널 뒤로 어긋나게 깔리는 격자 한 장이고 선 색 토큰만 쓴다.
+ *
+ * 띠와 패널의 숫자(대학 수·연도·권역 수)는 전부 서버에서 온다. 상수로 박으면
+ * 8월 공시가 갱신되는 순간 거짓이 된다. 데이터가 아직 없으면 연도 항목을 비워
+ * 두지 않고 빼서, 콜드 스타트 중에도 "undefined년" 같은 글자가 보이지 않게 한다.
  */
-export function HomeHero({
-  title,
-  subtitle,
-  eyebrow,
-  imageSrc,
-  children,
-}: HomeHeroProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [mode, setMode] = useState<HeroMode>('static')
-
-  useEffect(() => {
-    setMode(decideHeroMode(readEnvironment()))
-  }, [])
-
-  useEffect(() => {
-    if (mode !== 'three') return
-    const canvas = canvasRef.current
-    if (!canvas) return
-
-    let cancelled = false
-    let handle: { pause(): void; resume(): void; dispose(): void; resize(): void } | null =
-      null
-    const cleanups: Array<() => void> = []
-
-    // three.js 를 여기서만 불러온다. 정적 경로로 간 사용자는 받지 않는다.
-    import('./scene')
-      .then(({ createScene }) => {
-        if (cancelled) return
-        // createScene 은 토큰을 못 읽으면 던진다. 아래 catch 가 정적으로 돌린다.
-        handle = createScene(canvas)
-
-        const onResize = () => handle?.resize()
-        window.addEventListener('resize', onResize)
-        cleanups.push(() => window.removeEventListener('resize', onResize))
-
-        // 탭이 가려지면 멈춘다. 안 그러면 보이지도 않는 화면을 계속 그린다.
-        const onVisibility = () =>
-          document.hidden ? handle?.pause() : handle?.resume()
-        document.addEventListener('visibilitychange', onVisibility)
-        cleanups.push(() =>
-          document.removeEventListener('visibilitychange', onVisibility),
-        )
-
-        // 스크롤로 뷰포트를 벗어나도 멈춘다.
-        if ('IntersectionObserver' in window) {
-          const io = new IntersectionObserver(
-            ([entry]) => (entry.isIntersecting ? handle?.resume() : handle?.pause()),
-            { threshold: 0 },
-          )
-          io.observe(canvas)
-          cleanups.push(() => io.disconnect())
-        }
-      })
-      .catch(() => {
-        // 청크를 못 받았다(오프라인 캐시 문제 등). 장식이 없을 뿐이다.
-        if (!cancelled) setMode('static')
-      })
-
-    return () => {
-      cancelled = true
-      for (const fn of cleanups) fn()
-      handle?.dispose()
-    }
-  }, [mode])
+export function HomeHero({ dataset, datasetError, onRetry, onStart }: HomeHeroProps) {
+  const years = dataset?.years ?? []
+  const first = years.length > 0 ? Math.min(...years) : null
+  const last = years.length > 0 ? Math.max(...years) : null
 
   return (
     <section
       aria-label="소개"
-      // 사진 위에 흰 글자를 얹는다. 테마와 무관하게 이 구간만 항상 어둡다 —
-      // 사진이 배경이면 다크/라이트로 글자색을 바꿀 수가 없다.
-      className="relative overflow-hidden bg-[var(--surface-inverse)]"
+      className="relative overflow-hidden border-b border-[var(--border-subtle)]"
     >
-      {imageSrc && (
-        <img
-          src={imageSrc}
-          // 장식이다. 이 사진이 전하는 정보는 없다 — alt 를 채우면
-          // 스크린리더 사용자에게 의미 없는 문장을 읽힌다.
-          alt=""
-          aria-hidden="true"
-          // 히어로는 첫 화면이다. 지연 로딩하면 흰 화면이 먼저 보인다.
-          fetchPriority="high"
-          className="absolute inset-0 h-full w-full object-cover opacity-45"
-        />
-      )}
-
-      {/* 글 읽히는 대비를 사진에 맡기지 않는다. 사진이 밝은 쪽이 걸리면
-          흰 글자가 사라진다. */}
-      <div
-        aria-hidden="true"
-        className="absolute inset-0 bg-[image:var(--scrim-hero)]"
-      />
-
-      {/* 움직이는 장식. 보조 기술에서는 감춘다 — 읽어봐야 의미가 없다.
-          오른쪽에만 둔다. 글 뒤에 깔면 대비가 떨어져 읽기 나빠진다. */}
-      {mode === 'three' ? (
-        <canvas
-          ref={canvasRef}
-          data-testid="hero-canvas"
-          aria-hidden="true"
-          className="
-            pointer-events-none absolute inset-y-0 right-0 hidden h-full w-1/2
-            opacity-90 lg:block
-          "
-        />
-      ) : (
-        <div
-          data-testid="hero-static"
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-[image:var(--scrim-hero-glow)]"
-        />
-      )}
-
       <div
         className="
-          relative mx-auto flex max-w-[var(--container-content)] flex-col
-          gap-[var(--spacing-5)]
-          px-[var(--spacing-5)] py-[var(--spacing-9)]
+          mx-auto grid max-w-[var(--container-content)] gap-[var(--spacing-7)]
+          px-[var(--spacing-5)] py-[var(--spacing-7)] md:py-[var(--spacing-8)]
+          lg:grid-cols-[0.92fr_1.08fr] lg:items-start lg:gap-[2.625rem]
         "
       >
-        {eyebrow && (
-          <span className="text-eyebrow font-semibold uppercase text-[var(--color-brand-200)]">
-            {eyebrow}
-          </span>
-        )}
-        {/* 표제는 크게. 지금까지 화면에서 가장 큰 글자가 18px 이라 무엇이
-            표제인지 알 수 없었다. */}
-        <h1 className="m-0 max-w-[20ch] text-display font-bold text-[var(--color-ink-0)]">
-          {title}
-        </h1>
-        <p className="m-0 max-w-[48ch] text-lead text-[var(--color-ink-200)]">{subtitle}</p>
-        {children && <div className="flex flex-wrap gap-[var(--spacing-3)]">{children}</div>}
+        <div className="flex max-w-[var(--container-prose)] flex-col gap-[var(--spacing-5)]">
+          <p className="eyebrow m-0 text-[var(--text-secondary)]">{EYEBROW}</p>
+
+          {/* 표제는 Pretendard 700 이다. 강조 단어만 주홍 — span 이 끼어도 접근성
+              이름은 한 줄 그대로여야 한다(e2e 가 이름으로 찾는다). */}
+          <h1 className="m-0 text-display font-bold text-[var(--text-primary)]">
+            우리 대학은 <span className="text-[var(--accent)]">몇 번째</span>인가
+          </h1>
+
+          <p className="m-0 text-lead text-[var(--text-secondary)]">{LEAD}</p>
+
+          {/* 휴대폰에서는 1단계가 첫 화면 아래에 있다. 큰 화면에서는 보이므로 버튼을
+              두지 않는다 — 잉크 사각은 한 화면에 하나다. */}
+          <Button variant="primary" size="lg" className="self-start md:hidden" onClick={onStart}>
+            분석 시작
+          </Button>
+
+          <ul
+            aria-label="자료 범위"
+            className="
+              m-0 flex list-none flex-wrap gap-x-[var(--spacing-5)] gap-y-[var(--spacing-2)]
+              p-0 text-meta text-[var(--text-muted)]
+            "
+          >
+            <li>출처 대학알리미 「7-가. 전임교원의 연구 실적」</li>
+            {first !== null && last !== null && <li>{`공시 ${first}–${last}년`}</li>}
+            <li>매년 8월 공시 반영</li>
+          </ul>
+        </div>
+
+        <div className="relative">
+          {/* 장식 — 패널 뒤로 오른쪽·아래로 어긋난 격자 한 장. 하드 오프셋 그림자의
+              격자판이다. 큰 화면에서만 보이되 DOM 에는 늘 있다(e2e 계약). */}
+          <div
+            data-testid="hero-static"
+            aria-hidden="true"
+            className="
+              pointer-events-none absolute -right-[var(--spacing-5)] -bottom-[var(--spacing-5)]
+              left-[var(--spacing-5)] top-[var(--spacing-5)] hidden
+              bg-[linear-gradient(var(--border-subtle)_1px,transparent_1px),linear-gradient(90deg,var(--border-subtle)_1px,transparent_1px)]
+              bg-[size:var(--grid-size)_var(--grid-size)] lg:block
+            "
+          />
+          <DataPanel dataset={dataset} error={datasetError} onRetry={onRetry} />
+        </div>
       </div>
     </section>
   )

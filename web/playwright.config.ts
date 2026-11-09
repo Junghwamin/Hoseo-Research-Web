@@ -20,6 +20,12 @@ const VENV_PYTHON = fileURLToPath(
 const PYTHON_BIN = process.env.PYTHON_BIN ?? VENV_PYTHON
 
 /**
+ * API 서버 포트. 기본 8000(CI·문서와 같다). 개발 PC 에서 8000 을 다른 프로그램이
+ * 쥐고 있으면 `API_PORT=8010` 처럼 넘긴다 — Vite 프록시도 같은 값을 본다.
+ */
+const API_PORT = process.env.API_PORT ?? '8000'
+
+/**
  * 화면 단위 게이트(계획 §7.3).
  *
  * 개발 서버를 Playwright 가 직접 띄운다 — 사람이 미리 켜 두는 것을 잊으면
@@ -55,15 +61,18 @@ export default defineConfig({
   webServer: [
     {
       // 로컬은 venv, CI 는 시스템 python 을 쓴다. 경로를 박아두면 한쪽이 깨진다.
-      command: `"${PYTHON_BIN}" -m uvicorn api.main:app --host 127.0.0.1 --port 8000`,
+      command: `"${PYTHON_BIN}" -m uvicorn api.main:app --host 127.0.0.1 --port ${API_PORT}`,
       cwd: '..',
-      url: 'http://127.0.0.1:8000/api/health',
+      url: `http://127.0.0.1:${API_PORT}/api/health`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },
     {
       command: 'npm run dev',
       url: 'http://127.0.0.1:5173',
+      // Playwright 가 process.env 위에 덧씌운다. 이미 떠 있는 Vite 를 재사용하면
+      // 그쪽의 프록시 대상이 쓰이므로, 포트를 바꿨으면 옛 Vite 를 먼저 끈다.
+      env: { VITE_API_TARGET: `http://127.0.0.1:${API_PORT}` },
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },

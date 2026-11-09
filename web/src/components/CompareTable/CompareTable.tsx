@@ -1,5 +1,6 @@
 import { useId } from 'react'
 
+import { cn } from '../../lib/cn'
 import {
   formatFaculty,
   formatPapers,
@@ -18,12 +19,19 @@ const NUMERIC_COLUMNS = [
 ] as const
 
 /**
+ * 머리글 칸 — 아이브로. 한국어 짧은 명사라 모노를 걸지 않는다(한글이 섞이면
+ * 글꼴이 갈라진다). 아래 1px 굵은 선은 머리글 행(`thead tr`)이 긋는다.
+ */
+const HEADER_CELL =
+  'eyebrow whitespace-nowrap px-[var(--spacing-4)] py-[var(--spacing-3)] text-[var(--text-secondary)]'
+
+/**
  * 숫자 칸 공통 스타일.
  *
- * `tabular-nums` 와 고정폭 글꼴을 쓰는 이유는 자릿수를 세로로 맞추기
- * 위해서다. 비례폭 숫자로 찍으면 `0.3961` 과 `0.1297` 의 소수점이 어긋나
- * 세로로 훑을 수가 없다. `whitespace-nowrap` 은 390px 화면에서 `1,234명` 이
- * 중간에 끊기는 것을 막는다.
+ * `tabular-nums` 와 고정폭 글꼴(`--font-numeric`, Geist Mono)을 쓰는 이유는
+ * 자릿수를 세로로 맞추기 위해서다. 비례폭 숫자로 찍으면 `0.3961` 과 `0.1297` 의
+ * 소수점이 어긋나 세로로 훑을 수가 없다. `whitespace-nowrap` 은 390px 화면에서
+ * `1,234명` 이 중간에 끊기는 것을 막는다.
  */
 const NUMERIC_CELL =
   'whitespace-nowrap px-[var(--spacing-4)] py-[var(--spacing-3)] text-right font-[family-name:var(--font-numeric)] tabular-nums'
@@ -32,6 +40,10 @@ const NUMERIC_CELL =
  * 비교군 대학 비교표.
  *
  * 정렬하지 않는다. 서버가 1인당논문수 내림차순으로 주는 순서를 그대로 그린다.
+ *
+ * 표는 프레임 안에 있다 — 흰 면 + 1px `--border-strong` + 소프트 그림자(DESIGN.md §5).
+ * 3단계는 이 표를 맨몸으로 두므로 틀은 표가 스스로 가진다. 대상 대학 행은
+ * `--accent-soft` 바탕에 왼쪽 3px 주홍 — 이 화면에서 주홍이 가리키는 두 곳 중 하나다.
  */
 export function CompareTable({
   rows,
@@ -45,14 +57,11 @@ export function CompareTable({
 
   if (loading) {
     return (
+      // 스켈레톤은 sunken 면의 직각 블록 하나다. 틀을 두르지 않는다 — 레이아웃과 같은 크기면 된다.
       <div
         data-testid="compare-skeleton"
         aria-hidden="true"
-        className="
-          h-[16rem] w-full animate-pulse
-          rounded-[var(--radius-lg)] border border-[var(--border-subtle)]
-          bg-[var(--surface-sunken)]
-        "
+        className="h-[16rem] w-full animate-pulse bg-[var(--surface-sunken)]"
       />
     )
   }
@@ -62,12 +71,12 @@ export function CompareTable({
       <div
         className="
           flex w-full items-center justify-center
-          rounded-[var(--radius-lg)] border border-dashed border-[var(--border-subtle)]
+          border border-dashed border-[var(--border-subtle)]
           bg-[var(--surface-raised)] p-[var(--spacing-6)]
-          text-sm text-[var(--text-muted)]
+          text-body text-[var(--text-muted)]
         "
       >
-        표시할 데이터가 없다.
+        표시할 데이터가 없습니다.
       </div>
     )
   }
@@ -82,16 +91,18 @@ export function CompareTable({
       tabIndex={0}
       className="
         w-full overflow-x-auto
-        rounded-[var(--radius-lg)] border border-[var(--border-subtle)]
-        bg-[var(--surface-raised)] shadow-[var(--shadow-sm)]
+        border border-[var(--border-strong)] bg-[var(--surface-raised)]
+        shadow-[var(--shadow-soft)]
       "
     >
-      <table className="w-full min-w-[42rem] border-collapse text-sm">
+      <table className="w-full min-w-[42rem] border-collapse text-body">
+        {/* 표의 이름은 프레임의 머리글 — 아이브로. 아래 헤어라인으로 머리글 행과 나눈다. */}
         <caption
           id={captionId}
           className="
-            caption-top px-[var(--spacing-4)] py-[var(--spacing-3)]
-            text-left text-sm font-medium text-[var(--text-secondary)]
+            eyebrow caption-top border-b border-[var(--border-subtle)]
+            px-[var(--spacing-4)] py-[var(--spacing-4)]
+            text-left text-[var(--text-secondary)]
           "
         >
           {caption}
@@ -99,21 +110,11 @@ export function CompareTable({
 
         <thead>
           <tr className="border-b border-[var(--border-strong)]">
-            <th
-              scope="col"
-              className="
-                px-[var(--spacing-4)] py-[var(--spacing-3)]
-                text-left font-medium text-[var(--text-secondary)]
-              "
-            >
+            <th scope="col" className={cn(HEADER_CELL, 'text-left')}>
               학교명
             </th>
             {NUMERIC_COLUMNS.map((column) => (
-              <th
-                key={column}
-                scope="col"
-                className={`${NUMERIC_CELL} font-medium text-[var(--text-secondary)]`}
-              >
+              <th key={column} scope="col" className={cn(HEADER_CELL, 'text-right')}>
                 {column}
               </th>
             ))}
@@ -134,21 +135,22 @@ export function CompareTable({
                 key={`${row.name}::${index}`}
                 data-highlight={highlighted ? 'true' : undefined}
                 aria-current={highlighted ? 'true' : undefined}
-                className={
-                  highlighted
-                    ? 'border-b border-[var(--border-subtle)] bg-[var(--accent-soft)]'
-                    : 'border-b border-[var(--border-subtle)] hover:bg-[var(--surface-sunken)]'
-                }
+                className={cn(
+                  'border-b border-[var(--border-subtle)] last:border-b-0',
+                  highlighted ? 'bg-[var(--accent-soft)]' : 'hover:bg-[var(--surface-sunken)]',
+                )}
               >
                 <th
                   scope="row"
-                  className={
+                  className={cn(
+                    'break-keep px-[var(--spacing-4)] py-[var(--spacing-3)] text-left',
                     highlighted
-                      ? // 강조를 색에만 맡기지 않는다. 굵기와 왼쪽 막대가
-                        // 색을 못 보는 사람에게도 남는 단서다.
-                        'break-keep border-l-2 border-l-[var(--accent)] px-[var(--spacing-4)] py-[var(--spacing-3)] text-left font-semibold text-[var(--text-primary)]'
-                      : 'break-keep px-[var(--spacing-4)] py-[var(--spacing-3)] text-left font-normal text-[var(--text-secondary)]'
-                  }
+                      ? // 강조를 색에만 맡기지 않는다. 굵기와 왼쪽 막대가 색을 못 보는
+                        // 사람에게도 남는 단서다. 막대는 셀에 긋는다 — border-collapse
+                        // 에서 tr 의 좌우 선은 브라우저가 그리지 않는다.
+                        'border-l-[3px] border-l-[var(--accent)] font-semibold text-[var(--text-primary)]'
+                      : 'font-normal text-[var(--text-secondary)]',
+                  )}
                 >
                   <span>{row.name}</span>
                   {/* 굵기·색·막대는 화면용이다. 스크린리더에는 말로 알린다. */}

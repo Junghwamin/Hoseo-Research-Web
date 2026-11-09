@@ -1,10 +1,16 @@
+import { useId } from 'react'
+
 import { byYear } from '../../../api/client'
+import { overlayKey } from '../../../api/overlay'
 import { ChartGallery } from '../../../components/ChartGallery'
 import { CompareTable } from '../../../components/CompareTable'
 import { TrendChart } from '../../../components/TrendChart'
 import { YoYPanel } from '../../../components/YoYPanel'
-import { Card } from '../../../design/ui'
+import { Icon } from '../../../design/ui'
 import type { StepProps } from './types'
+
+/** Word 보고서에 실리는 순서. 문서와 같은 순서로 검토한다. */
+const WORD_ORDER = ['trend', 'avg', 'bar', 'rank', 'compare'] as const
 
 /**
  * 3단계: 그래프 검토.
@@ -14,11 +20,18 @@ import type { StepProps } from './types'
  * 썼다. 이관 후에는 추이 하나만 화면에 남아서, 나머지 4종은 **문서를 열기
  * 전에는 볼 수 없었다** — 확인 단계의 의미가 없어진 셈이다.
  *
- * 추이만 인터랙티브(recharts)로 한 번 더 그린다. 값을 짚어 읽는 용도라
- * 목적이 다르다. 나머지 4종은 서버 PNG 가 유일한 표현이다.
+ * 다섯 장을 문서 순서대로 전부 보인다. 추이의 인터랙티브 판(recharts)은
+ * 값을 짚어 읽는 보조 도구라 접어 둔다 — 같은 그림이 둘 보이면 어느 쪽이
+ * 문서에 실리는지 헷갈린다.
+ *
+ * 브라우저에 더한 데이터가 있으면 차트는 POST 로 받는다(`overlayKey`) — 주소에
+ * 실을 수 없는 추가 데이터가 본문으로 가야 그림이 Word 와 같아진다.
+ *
+ * 구획은 카드가 아니라 헤어라인이다. 카드 안에 카드가 들어가면 테두리만 세 겹이다.
  */
 export function Step3Charts({ state }: StepProps) {
   const { stats } = state
+  const ids = { charts: useId(), compare: useId(), yoy: useId() }
   if (!stats) return null
 
   const trendSeries = [
@@ -47,26 +60,11 @@ export function Step3Charts({ state }: StepProps) {
   ]
 
   return (
-    <div className="flex flex-col gap-[var(--spacing-6)]">
-      <Card
-        eyebrow="인터랙티브"
-        title="1인당 논문 수 추이"
-        description="값을 짚어 읽는 용도다. 문서에는 아래의 서버 차트가 실린다."
-      >
-        <TrendChart
-          series={trendSeries}
-          valueLabel="1인당 논문 수(편)"
-          description={`${stats.university}, ${stats.regionName} 평균, 전국 평균, 비교군 평균의 1인당 논문 수 추이`}
-          precision={4}
-        />
-      </Card>
-
-      <Card
-        eyebrow="보고서 수록"
-        title="Word 에 들어가는 차트"
-        description="아래 그림이 그대로 문서에 삽입된다. 여기서 확인한 것과 문서가 다르지 않다."
-        bodyClassName="p-[var(--spacing-4)]"
-      >
+    <div className="flex flex-col gap-[var(--spacing-7)]">
+      <section aria-labelledby={ids.charts} className="flex flex-col gap-[var(--spacing-4)]">
+        <h3 id={ids.charts} className="m-0 text-heading font-semibold text-[var(--text-primary)]">
+          Word 에 실리는 차트 5장
+        </h3>
         <ChartGallery
           university={stats.university}
           year={stats.year}
@@ -74,33 +72,64 @@ export function Step3Charts({ state }: StepProps) {
           compareGroup={stats.compareGroup}
           years={stats.years}
           dataVersion={stats.dataVersion}
-          // 추이는 위에서 인터랙티브로 봤다. 같은 그림을 두 번 그리면
-          // 화면만 길어진다.
-          kinds={['bar', 'avg', 'rank', 'compare']}
+          kinds={WORD_ORDER}
+          featured="trend"
+          overlayKey={overlayKey()}
         />
-      </Card>
 
-      <Card
-        eyebrow="비교군"
-        title={`${stats.year}년 ${stats.regionName} 비교군 ${stats.compare.length}개교`}
-        bodyClassName="p-0"
+        <details className="group border border-[var(--border-subtle)]">
+          <summary
+            className="
+              flex cursor-pointer list-none items-center justify-between gap-[var(--spacing-3)]
+              px-[var(--spacing-4)] py-[var(--spacing-3)] text-body font-medium
+              text-[var(--text-primary)]
+            "
+          >
+            값 짚어 보기 · 인터랙티브 추이
+            <Icon
+              name="chevron-down"
+              className="transition-transform duration-[var(--duration-fast)] group-open:rotate-180"
+            />
+          </summary>
+          <div className="border-t border-[var(--border-subtle)] p-[var(--spacing-4)]">
+            <p className="m-0 mb-[var(--spacing-3)] text-body text-[var(--text-secondary)]">
+              문서에는 위 차트가 실립니다. 이 그래프는 점을 가리켜 값을 읽을 때 씁니다.
+            </p>
+            <TrendChart
+              series={trendSeries}
+              valueLabel="1인당 논문 수(편)"
+              description={`${stats.university}, ${stats.regionName} 평균, 전국 평균, 비교군 평균의 1인당 논문 수 추이`}
+              precision={4}
+            />
+          </div>
+        </details>
+      </section>
+
+      <section
+        aria-labelledby={ids.compare}
+        className="flex flex-col gap-[var(--spacing-4)] border-t border-[var(--border-subtle)] pt-[var(--spacing-6)]"
       >
+        <h3 id={ids.compare} className="m-0 text-heading font-semibold text-[var(--text-primary)]">
+          {`${stats.year}년 ${stats.regionName} 비교군 ${stats.compare.length}개교`}
+        </h3>
         <CompareTable
           rows={stats.compare}
           caption={`${stats.year}년 ${stats.regionName} 비교군 ${stats.compare.length}개교 연구실적`}
           highlightName={stats.university}
         />
-      </Card>
+      </section>
 
-      <Card eyebrow="전년 대비" title="증감 상·하위">
+      <section
+        aria-labelledby={ids.yoy}
+        className="flex flex-col gap-[var(--spacing-4)] border-t border-[var(--border-subtle)] pt-[var(--spacing-6)]"
+      >
+        <h3 id={ids.yoy} className="m-0 text-heading font-semibold text-[var(--text-primary)]">
+          전년 대비 증감 상·하위
+        </h3>
         {/* baseYear 가 현재, compareYear 가 이전이다. 뒤집으면 화면에
             "2026 → 2025" 가 남는다(R-RS-03). */}
-        <YoYPanel
-          changes={stats.yoy}
-          baseYear={stats.year}
-          compareYear={stats.year - 1}
-        />
-      </Card>
+        <YoYPanel changes={stats.yoy} baseYear={stats.year} compareYear={stats.year - 1} />
+      </section>
     </div>
   )
 }

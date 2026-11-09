@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 
 import type { UniversityRow } from '../../api/client'
 import { cn } from '../../lib/cn'
-import { Button } from '../../design/ui'
+import { Button, CONTROL_CLASS } from '../../design/ui'
 
 export interface CompareGroupPickerProps {
   /** 권역 안의 대학 전체. 여기 없는 이름은 고를 수 없다. */
@@ -67,22 +67,24 @@ export function CompareGroupPicker({
 
   if (error) {
     return (
-      <p role="alert" className="m-0 text-sm text-[var(--color-down)]">
-        비교군 후보를 불러오지 못했다: {error}
+      // 무엇이 났는지 → 서버가 말한 이유. detail 은 화면에 그대로 뜬다.
+      <p role="alert" className="m-0 text-body text-[var(--color-down)]">
+        {`비교군 후보를 불러오지 못했습니다. ${error}`}
       </p>
     )
   }
 
   if (loading) {
     return (
-      <p className="m-0 text-sm text-[var(--text-muted)]">비교군 후보를 불러오는 중…</p>
+      <p className="m-0 text-body text-[var(--text-secondary)]">비교군 후보를 불러오는 중…</p>
     )
   }
 
   if (candidates.length === 0) {
+    // 제주권은 전 연도에 걸쳐 1개교다 — 실제로 오는 상태라 조용히 넘기지 않는다.
     return (
-      <p className="m-0 text-sm text-[var(--text-muted)]">
-        {regionName ? `${regionName} 에 ` : ''}비교할 다른 대학이 없다.
+      <p className="m-0 text-body text-[var(--text-secondary)]">
+        {`${regionName ? `${regionName}에는 ` : ''}비교할 다른 대학이 없습니다.`}
       </p>
     )
   }
@@ -92,9 +94,9 @@ export function CompareGroupPicker({
   return (
     <div className="flex flex-col gap-[var(--spacing-3)]">
       <div className="flex flex-wrap items-center justify-between gap-[var(--spacing-3)]">
-        <p className="m-0 text-sm text-[var(--text-secondary)]" data-testid="compare-picker-summary">
+        <p className="m-0 text-body text-[var(--text-secondary)]" data-testid="compare-picker-summary">
           {usingDefault
-            ? `서버 기본 비교군을 쓴다 (${regionName ?? '권역'} 상위권)`
+            ? `서버 기본 비교군 · ${regionName ?? '권역'} 상위권`
             : `${selected.size}개교 선택`}
         </p>
         {!usingDefault && (
@@ -108,38 +110,34 @@ export function CompareGroupPicker({
         <input
           type="search"
           aria-label="비교군 후보 검색"
-          placeholder={`${candidates.length}개교에서 찾기`}
+          placeholder={`${candidates.length}개교 중 검색`}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="
-            w-full rounded-[var(--radius-md)] border border-[var(--border-strong)]
-            bg-[var(--surface-raised)] px-[var(--spacing-3)] py-[var(--spacing-2)]
-            text-sm text-[var(--text-primary)]
-            hover:border-[var(--accent)]
-          "
+          className={CONTROL_CLASS}
         />
       )}
 
       <ul
         data-testid="compare-candidates"
         // 목록이 길어도 화면을 밀어내지 않게 한다. 1단계에서 아래 버튼이
-        // 화면 밖으로 밀리면 "다음" 을 못 찾는다.
+        // 화면 밖으로 밀리면 "다음" 을 못 찾는다. 직각 틀, 행 사이 헤어라인.
         className="
           m-0 max-h-[18rem] list-none overflow-y-auto overscroll-contain
-          rounded-[var(--radius-md)] border border-[var(--border-subtle)]
-          p-[var(--spacing-1)]
+          rounded-none border border-[var(--border-strong)] bg-[var(--surface-raised)] p-0
         "
       >
         {filtered.map((row) => {
           const checked = selected.has(row.name)
           return (
-            <li key={row.name}>
+            <li key={row.name} className="border-b border-[var(--border-subtle)] last:border-b-0">
+              {/* 선택 행은 sunken 면이고 체크 표시는 잉크다. 주홍은 가리키는 것
+                  (현재 단계·기준 연도)에만 쓴다 — 1단계의 두 자리는 이미 찼다. */}
               <label
                 className={cn(
                   `flex cursor-pointer items-center justify-between gap-[var(--spacing-3)]
-                   rounded-[var(--radius-sm)] px-[var(--spacing-3)] py-[var(--spacing-2)]
-                   text-sm hover:bg-[var(--surface-sunken)]`,
-                  checked && 'bg-[var(--accent-soft)]',
+                   rounded-none px-[var(--spacing-3)] py-[var(--spacing-2)]
+                   text-body hover:bg-[var(--surface-sunken)]`,
+                  checked && 'bg-[var(--surface-sunken)]',
                 )}
               >
                 <span className="flex items-center gap-[var(--spacing-3)]">
@@ -147,13 +145,16 @@ export function CompareGroupPicker({
                     type="checkbox"
                     checked={checked}
                     onChange={() => toggle(row.name)}
-                    className="accent-[var(--accent)]"
+                    className="accent-[var(--text-primary)]"
                   />
-                  <span className="text-[var(--text-primary)]">{row.name}</span>
+                  <span className={cn('text-[var(--text-primary)]', checked && 'font-semibold')}>
+                    {row.name}
+                  </span>
                 </span>
                 {/* 숫자를 함께 보여준다. 이름만 보고 비교군을 고르라는 것은
-                    무엇을 고르는지 모르고 고르라는 말이다. */}
-                <span className="tabular shrink-0 text-xs text-[var(--text-muted)]">
+                    무엇을 고르는지 모르고 고르라는 말이다. 한글이 섞인 한 줄이라
+                    모노는 걸지 않고 tabular 로 자릿수만 맞춘다(DESIGN.md §3). */}
+                <span className="tabular shrink-0 text-meta text-[var(--text-muted)]">
                   {row.regionalRank != null && `권역 ${row.regionalRank}위 · `}
                   {row.perCapita.toFixed(4)}편
                 </span>
@@ -162,8 +163,8 @@ export function CompareGroupPicker({
           )
         })}
         {filtered.length === 0 && (
-          <li className="px-[var(--spacing-3)] py-[var(--spacing-2)] text-sm text-[var(--text-muted)]">
-            일치하는 대학이 없다
+          <li className="px-[var(--spacing-3)] py-[var(--spacing-2)] text-body text-[var(--text-muted)]">
+            일치하는 대학이 없습니다
           </li>
         )}
       </ul>

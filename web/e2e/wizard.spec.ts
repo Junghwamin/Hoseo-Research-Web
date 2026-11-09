@@ -59,7 +59,7 @@ test('대학을 목록에서 고른다 — 없는 이름은 확정되지 않는�
   await input.fill('없는대학교')
   // 원본 selectbox 는 없는 이름을 넣는 것이 **구조적으로 불가능**했다.
   // 이관 후 자유 텍스트가 되면서 오타 한 번이 404 였다.
-  await expect(page.getByRole('status').first()).toContainText('일치하는 대학이 없다')
+  await expect(page.getByRole('status').first()).toContainText('일치하는 대학이 없습니다')
   await expect(page.getByTestId('load-button')).toBeDisabled()
 
   await input.fill('호서')
@@ -71,8 +71,12 @@ test('전국 대학 전체가 목록에 있다', async ({ page }) => {
   const input = page.getByTestId('university-input')
   await input.click()
 
-  // 개수만 주고 이름을 안 주면 화면은 자유 입력밖에 못 만든다
-  await expect(page.getByRole('status').first()).toContainText(/\d{3}개 중/)
+  // 개수만 주고 이름을 안 주면 화면은 자유 입력밖에 못 만든다.
+  // 비어 있을 때는 "N개교 중에서 고를 수 있습니다", 목록이 열려 전부 일치하면
+  // "N개교 중 N개 일치" 다 — 둘 다 세 자리 대학 수를 말해야 한다.
+  await expect(page.getByRole('status').first()).toContainText(
+    /\d{3}개교 중 \d+개 일치|\d{3}개교 중에서/,
+  )
 })
 
 test('비교군을 직접 고르면 분석에 반영된다', async ({ page }) => {
@@ -199,6 +203,24 @@ test('고른 연도가 3단계 차트 주소에도 실린다', async ({ page }) 
   expect(years).toHaveLength(5)
 })
 
+test('다음 버튼이 다음 단계의 이름을 말한다', async ({ page }) => {
+  await page.goto('/')
+  // "다음 →" 는 무엇이 오는지 말하지 않는다. 단계 이름은 registry 한 곳에서 온다.
+  await expect(page.getByTestId('next-button')).toHaveText('다음: 통계 확인')
+})
+
+test('2단계부터 컨텍스트 바가 대상을 보여주고 변경으로 1단계에 돌아간다', async ({ page }) => {
+  await loadAndAdvance(page)
+  const bar = page.getByTestId('context-bar')
+  await expect(bar).toContainText('호서대학교')
+  await expect(bar).toContainText(/\d+개년/)
+
+  await page.getByTestId('context-change').click()
+  await expect(page.getByTestId('step-1')).toHaveAttribute('aria-current', 'step')
+  // 1단계에서는 컨텍스트 바가 없다 — 바로 아래 폼이 같은 내용을 말한다.
+  await expect(bar).toHaveCount(0)
+})
+
 test('2단계에 연도별 상세 표가 있다', async ({ page }) => {
   await loadAndAdvance(page)
 
@@ -210,13 +232,14 @@ test('2단계에 연도별 상세 표가 있다', async ({ page }) => {
   await expect(table.getByRole('rowheader', { name: '2026년' })).toBeVisible()
 })
 
-test('3단계에 Word 에 실릴 차트 4종이 모두 뜬다', async ({ page }) => {
+test('3단계에 Word 에 실릴 차트 5종이 모두 뜬다', async ({ page }) => {
   await loadAndAdvance(page)
   await page.getByTestId('next-button').click() // 3
 
   // 원본은 "5종 차트를 확인하세요, 보고서에 그대로 삽입됩니다" 였다.
   // 이관 후에는 추이 하나만 남아 나머지는 문서를 열어야 볼 수 있었다.
-  for (const kind of ['bar', 'avg', 'rank', 'compare']) {
+  // 추이 PNG 도 화면에 있다 — 인터랙티브 차트는 보조이고, 문서에 실리는 것은 이 그림이다.
+  for (const kind of ['trend', 'avg', 'bar', 'rank', 'compare']) {
     const figure = page.getByTestId(`chart-${kind}`)
     await expect(figure).toBeVisible()
     const img = figure.getByRole('img')
@@ -296,7 +319,7 @@ test('연도 없는 파일명은 보내기 전에 막는다', async ({ page }) =
     buffer: Buffer.from('not really xlsx'),
   })
 
-  await expect(page.getByTestId('picked-files')).toContainText('연도가 없다')
+  await expect(page.getByTestId('picked-files')).toContainText('연도가 없습니다')
   await expect(page.getByTestId('preprocess-button')).toBeDisabled()
 })
 
@@ -330,7 +353,7 @@ test('불러오기 전에는 다음으로 갈 수 없고, 왜인지 말해 준�
   await expect(page.getByTestId('next-button')).toBeDisabled()
   await expect(page.getByTestId('step-2')).toBeDisabled()
   // 회색으로 죽어 있기만 한 버튼이 사용자가 "불편하다" 고 한 것 중 하나였다
-  await expect(page.getByText('먼저 분석을 불러와야 한다')).toBeVisible()
+  await expect(page.getByText('분석을 먼저 불러오세요')).toBeVisible()
 })
 
 test('진행하면 단계가 열리고, 뒤로 가도 닫히지 않는다 (V19)', async ({ page }) => {
@@ -461,6 +484,49 @@ test('3단계에서 차트·비교표·증감이 모두 실수치로 그려진�
   await expect(page.getByTestId('yoy-target')).toContainText('2025년 0.1182 → 2026년 0.1297')
 })
 
+test('3단계가 화면 폭을 넘지 않는다 — 휴대폰에서 차트가 잘리지 않는다', async ({ page }) => {
+  await loadAndAdvance(page)
+  await page.getByTestId('next-button').click() // 3
+  await expect(page.getByTestId('yoy-target')).toBeVisible()
+
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  )
+  expect(overflow).toBe(0)
+})
+
+test('2단계 표와 상단바가 휴대폰에서 글자 단위로 쪼개지지 않는다', async ({ page }, info) => {
+  test.skip(info.project.name !== 'mobile', '모바일 전용')
+  await loadAndAdvance(page)
+
+  // 390px 에서 body 의 overflow-wrap: anywhere 가 "0.5246" 을 세 줄로, 상단바
+  // 제목을 한 자씩 쪼갰다. 표는 한 줄 높이로 남고 가로 스크롤이 넘침을 맡는다.
+  const row = page.getByTestId('year-table').locator('tbody tr').first()
+  await expect(row).toBeVisible()
+  const rowBox = await row.boundingBox()
+  expect(rowBox!.height).toBeLessThan(64)
+
+  const header = await page.getByRole('banner').boundingBox()
+  expect(header!.height).toBeLessThanOrEqual(56)
+})
+
+test('320px 에서도 가로 넘침이 없고 콤보박스 상태가 첫 status 다', async ({ page }) => {
+  // 가장 좁은 흔한 폰. 스텝 점 다섯 개와 바닥 고정 nav 가 가로 스크롤을 만들면
+  // 안 되고, 1단계로 돌아왔을 때 콤보박스의 status 가 페이지의 첫 status 로 남아야
+  // 한다(로딩 자리·모달이 role=status 를 끼워 넣지 않는다).
+  await page.setViewportSize({ width: 320, height: 640 })
+  await loadAndAdvance(page)
+  await page.getByTestId('next-button').click() // 3
+
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  )
+  expect(overflow).toBe(0)
+
+  await page.getByTestId('step-1').click()
+  await expect(page.getByRole('status').first()).toContainText(/개교/)
+})
+
 test('5단계가 서술 유무를 요약한다', async ({ page }) => {
   await loadAndAdvance(page)
   await page.getByTestId('next-button').click()
@@ -504,13 +570,19 @@ test('GPT 키가 없으면 이유를 말한다 (V16)', async ({ page }) => {
   await page.getByTestId('next-button').click()
   await page.getByTestId('next-button').click() // 4
 
+  // 누르기 전에 길이 보인다 — 키를 넣는 폼이 그 자리에 있다. 서버에 저장할 수
+  // 있는 배포면 서버 폼(api-key-input), 공개 배포면 브라우저 키 폼(client-key-input)이다.
+  // 어느 쪽이든 "⚠ 미설정" 만 띄우고 할 일을 주지 않는 상태는 없어야 한다.
+  await expect(
+    page.locator('[data-testid=api-key-input], [data-testid=client-key-input]').first(),
+  ).toBeVisible()
+
   await page.getByTestId('generate-button').click()
 
+  // 그래도 눌렀으면 서버가 이유를 돌려준다. 환경변수 이름은 운영자가 찾는 열쇠말이라 남긴다.
   const err = page.getByTestId('narrative-error')
   await expect(err).toBeVisible()
   await expect(err).toContainText('OPENAI_API_KEY')
-  // 문서가 안내하던 중첩 테이블 형식이 원인이었으므로 그것도 짚어준다
-  await expect(err).toContainText('평면 키')
 })
 
 test('서술이 비어도 보고서가 나온다', async ({ page }) => {

@@ -91,13 +91,6 @@ describe('컴포넌트 독립성', () => {
     }
     expect(offenders).toEqual([])
   })
-
-  it('three.js 는 배럴로 새어나오지 않는다', () => {
-    // 배럴이 scene 을 내보내면, 3D 를 쓰지 않는 화면의 초기 번들에도
-    // three.js 가 딸려 들어간다. 지연 로딩 계약이 조용히 깨진다.
-    const barrel = readFileSync(join(COMPONENTS, 'HomeHero', 'index.ts'), 'utf8')
-    expect(barrel).not.toMatch(/from '\.\/scene'/)
-  })
 })
 
 describe('마법사 단계', () => {

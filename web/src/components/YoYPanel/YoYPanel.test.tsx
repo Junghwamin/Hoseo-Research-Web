@@ -243,13 +243,13 @@ describe('YoYPanel — 중복 경고 (V12 잔여)', () => {
 describe('YoYPanel — 경계 케이스', () => {
   it('top 과 bottom 이 모두 비면 안내 문구를 낸다', () => {
     renderPanel()
-    expect(screen.getByText(/전년도 데이터가 없다/)).toBeInTheDocument()
+    expect(screen.getByText(/전년도 자료가 없습니다/)).toBeInTheDocument()
   })
 
   it('목록이 비어도 target 이 있으면 대상은 그린다', () => {
     // 안내는 비교 목록이 없다는 뜻이지, 대상 실적이 없다는 뜻이 아니다.
     renderPanel({ target: hoseo })
-    expect(screen.getByText(/전년도 데이터가 없다/)).toBeInTheDocument()
+    expect(screen.getByText(/전년도 자료가 없습니다/)).toBeInTheDocument()
     expect(screen.getByTestId('yoy-target')).toHaveTextContent('호서대학교')
   })
 
@@ -263,7 +263,7 @@ describe('YoYPanel — 경계 케이스', () => {
     renderPanel({ top: [entry({ name: '가대학교' })], bottom: [] })
     const bottom = screen.getByRole('group', { name: /감소 하위/ })
     expect(bottom).toHaveTextContent('해당 없음')
-    expect(screen.queryByText(/전년도 데이터가 없다/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/전년도 자료가 없습니다/)).not.toBeInTheDocument()
   })
 
   it('top·bottom 필드가 아예 없어도 빈 목록으로 읽는다', () => {
@@ -272,7 +272,7 @@ describe('YoYPanel — 경계 케이스', () => {
     render(
       <YoYPanel changes={{ target: hoseo }} baseYear={2026} compareYear={2025} />,
     )
-    expect(screen.getByText(/전년도 데이터가 없다/)).toBeInTheDocument()
+    expect(screen.getByText(/전년도 자료가 없습니다/)).toBeInTheDocument()
     expect(screen.getByTestId('yoy-target')).toHaveTextContent('호서대학교')
   })
 

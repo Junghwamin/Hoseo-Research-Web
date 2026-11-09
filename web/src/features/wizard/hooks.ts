@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import {
   api,
   ApiError,
   type DatasetInfo,
+  type SettingsResponse,
   type UniversityRow,
 } from '../../api/client'
 
@@ -12,6 +13,11 @@ export interface Async<T> {
   readonly data: T | null
   readonly loading: boolean
   readonly error: string | null
+}
+
+/** 다시 시도할 수 있는 요청. 실패 화면에 "새로고침" 말고 길이 있어야 한다. */
+export interface Reloadable<T> extends Async<T> {
+  readonly reload: () => void
 }
 
 const IDLE = { data: null, loading: false, error: null } as const
@@ -29,9 +35,13 @@ function message(e: unknown): string {
  * 취소 플래그가 있는 이유: 사용자가 빠르게 대상을 바꾸면 **먼저 보낸 요청이
  * 나중에 도착**할 수 있다. 그러면 새 대상 화면에 옛 대상의 목록이 뜬다
  * (V17 과 같은 모양의 사고다).
+ *
+ * `reload()` 는 같은 key 로 한 번 더 보낸다. Vercel 콜드 스타트 중 첫 요청이
+ * 504 로 죽는 일이 실제로 있고, 그때 화면이 오류 문구에서 멈춰 있으면 안 된다.
  */
-function useAsync<T>(key: string | null, fetcher: () => Promise<T>): Async<T> {
+function useAsync<T>(key: string | null, fetcher: () => Promise<T>): Reloadable<T> {
   const [state, setState] = useState<Async<T>>(IDLE)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     if (key === null) {
@@ -47,16 +57,29 @@ function useAsync<T>(key: string | null, fetcher: () => Promise<T>): Async<T> {
       alive = false
     }
     // fetcher 는 매 렌더 새로 만들어지므로 의존성에 넣지 않는다. key 가
-    // 요청을 결정한다 — key 가 같으면 같은 요청이다.
+    // 요청을 결정한다 — key 가 같으면 같은 요청이다. attempt 는 reload 용이다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key])
+  }, [key, attempt])
 
-  return state
+  const reload = useCallback(() => setAttempt((n) => n + 1), [])
+
+  return { ...state, reload }
 }
 
-/** 데이터셋 정보. 앱 수명 동안 한 번만 바뀐다. */
-export function useDataset(): Async<DatasetInfo> {
-  return useAsync('dataset', () => api.dataset())
+/**
+ * 데이터셋 정보. 전처리로 데이터를 갈아끼우면 `version` 이 올라 다시 받는다 —
+ * 대학 목록·연도·대학 수가 전부 바뀔 수 있다.
+ */
+export function useDataset(version = 0): Reloadable<DatasetInfo> {
+  return useAsync(`dataset:${version}`, () => api.dataset())
+}
+
+/**
+ * 서버 설정(키 유무·저장 가능 여부). 4단계가 들어올 때 묻는다 — 키가 없으면
+ * 버튼을 누르기 전에 이유와 다음 행동을 보여야 한다(V16).
+ */
+export function useSettings(): Reloadable<SettingsResponse> {
+  return useAsync('settings', () => api.settings())
 }
 
 /**

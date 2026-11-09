@@ -167,7 +167,7 @@ describe('TrendChart — 렌더', () => {
 
   it('계열이 없으면 빈 상태를 알린다', () => {
     render(<TrendChart series={[]} valueLabel="편" description="추이" />)
-    expect(screen.getByText(/표시할 데이터가 없다/)).toBeInTheDocument()
+    expect(screen.getByText(/표시할 데이터가 없습니다/)).toBeInTheDocument()
   })
 
   it('모든 값이 null 인 계열도 빈 상태로 본다', () => {
@@ -178,7 +178,7 @@ describe('TrendChart — 렌더', () => {
         description="추이"
       />,
     )
-    expect(screen.getByText(/표시할 데이터가 없다/)).toBeInTheDocument()
+    expect(screen.getByText(/표시할 데이터가 없습니다/)).toBeInTheDocument()
   })
 })
 

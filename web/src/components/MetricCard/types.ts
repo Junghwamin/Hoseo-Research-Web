@@ -35,21 +35,33 @@ export interface MetricDelta {
   readonly srLabel: string
 }
 
+/**
+ * 숫자 크기. **한 띠에 `answer` 는 하나다** — 보고서가 답해야 하는 질문이
+ * "우리 대학은 몇 번째인가" 라서 2단계에서는 전국순위만 이 크기다. 넷이 다
+ * 크면 아무것도 크지 않다.
+ */
+export type MetricSize = 'answer' | 'default'
+
 export interface MetricCardProps {
   /** 지표 이름. 예: `"전국순위"` */
   readonly label: string
 
   /**
-   * 이미 포맷된 본문 값. 예: `"71위"`, `"0.1297편"`, `"406명"`
-   * `null` 이면 값 없음(`—`)으로 그린다 — 0 과 구분해야 한다.
+   * 이미 포맷된 본문 값. 예: `"71"`, `"0.1297"`, `"1,018"`
+   * `null` 이면 값 없음(작은 `—` + 음성 "자료 없음")으로 그린다 — 0 과 구분해야 한다.
    */
   readonly value: string | null
 
-  /** 보조 설명. 예: `"2026년 기준"` */
+  /** 값 뒤에 작게 붙는 단위. 예: `"위"`, `"편"`, `"명"` */
+  readonly unit?: string
+
+  /** 보조 설명. 예: `"2026년 공시 · 사립 등재교 기준"` */
   readonly caption?: string
 
   /** 증감 표시. 생략하면 증감 영역 자체를 렌더하지 않는다. */
   readonly delta?: MetricDelta
+
+  readonly size?: MetricSize
 
   /** 데이터 로딩 중이면 스켈레톤을 그린다. */
   readonly loading?: boolean

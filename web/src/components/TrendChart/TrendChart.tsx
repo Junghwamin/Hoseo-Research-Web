@@ -14,10 +14,21 @@ import type { TrendChartProps } from './types'
 
 /**
  * 계열 색. tokens.css 의 변수를 참조한다 — 여기에 색 값을 쓰지 않는다(§12-1).
- * 대상 대학은 accent, 비교선은 중립색을 돌려 쓴다.
+ * 대상 계열만 주홍(이 화면의 1회), 비교선은 회색 점선이다(DESIGN.md §7).
  */
 const EMPHASIS_STROKE = 'var(--accent)'
-const MUTED_STROKES = ['var(--color-neutral)', 'var(--border-strong)', 'var(--text-muted)']
+// 비교선 셋. 글자색 둘과 굵은 선 색 하나 — 주홍 계열은 섞지 않는다. 색이 비슷해도
+// 갈리도록 점선 패턴을 함께 돌린다.
+const MUTED_STROKES = ['var(--text-secondary)', 'var(--text-muted)', 'var(--border-strong)']
+const MUTED_DASHES = ['4 4', '2 3', '8 4']
+
+/** 축 눈금 — 연도·숫자라 모노다. 크기는 캡션(12px)과 같다. */
+const TICK = { fill: 'var(--text-muted)', fontSize: 12, fontFamily: 'var(--font-mono)' }
+
+/** i 번째 계열이 강조선을 제외하고 몇 번째 비교선인가. */
+function mutedIndex(all: TrendChartProps['series'], i: number): number {
+  return all.slice(0, i).filter((s) => !s.emphasis).length
+}
 
 export function TrendChart({
   series,
@@ -29,14 +40,12 @@ export function TrendChart({
 }: TrendChartProps) {
   if (loading) {
     return (
+      // 스켈레톤은 sunken 면의 직각 블록 하나 — 차트와 같은 높이.
       <div
         data-testid="trend-skeleton"
         aria-hidden="true"
         style={{ height }}
-        className="
-          w-full animate-pulse rounded-[var(--radius-lg)]
-          border border-[var(--border-subtle)] bg-[var(--surface-sunken)]
-        "
+        className="w-full animate-pulse bg-[var(--surface-sunken)]"
       />
     )
   }
@@ -47,11 +56,11 @@ export function TrendChart({
         style={{ height }}
         className="
           flex w-full items-center justify-center
-          rounded-[var(--radius-lg)] border border-dashed border-[var(--border-subtle)]
-          bg-[var(--surface-raised)] text-sm text-[var(--text-muted)]
+          border border-dashed border-[var(--border-subtle)]
+          bg-[var(--surface-raised)] text-body text-[var(--text-muted)]
         "
       >
-        표시할 데이터가 없다.
+        표시할 데이터가 없습니다.
       </div>
     )
   }
@@ -66,15 +75,10 @@ export function TrendChart({
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={rows} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
             <CartesianGrid stroke="var(--border-subtle)" strokeDasharray="3 3" vertical={false} />
-            <XAxis
-              dataKey="year"
-              stroke="var(--text-muted)"
-              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
-              tickLine={false}
-            />
+            <XAxis dataKey="year" stroke="var(--border-strong)" tick={TICK} tickLine={false} />
             <YAxis
-              stroke="var(--text-muted)"
-              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
+              stroke="var(--border-strong)"
+              tick={TICK}
               tickLine={false}
               width={64}
               label={{
@@ -84,12 +88,15 @@ export function TrendChart({
                 style: { fill: 'var(--text-muted)', fontSize: 12 },
               }}
             />
+            {/* 툴팁은 직각 + 하드 그림자 — 드롭다운과 같은 깊이 규칙이다. */}
             <Tooltip
               contentStyle={{
                 background: 'var(--surface-raised)',
-                border: '1px solid var(--border-subtle)',
+                border: '1px solid var(--border-strong)',
                 borderRadius: 'var(--radius-md)',
+                boxShadow: 'var(--shadow-hard)',
                 color: 'var(--text-primary)',
+                fontSize: 12,
               }}
               // recharts 는 ValueType(number|string|array)을 넘긴다. 숫자만 포맷한다.
               formatter={(v: unknown) =>
@@ -106,9 +113,15 @@ export function TrendChart({
                 key={s.name}
                 type="monotone"
                 dataKey={s.name}
-                stroke={s.emphasis ? EMPHASIS_STROKE : MUTED_STROKES[i % MUTED_STROKES.length]}
+                stroke={
+                  s.emphasis
+                    ? EMPHASIS_STROKE
+                    : MUTED_STROKES[mutedIndex(series, i) % MUTED_STROKES.length]
+                }
                 strokeWidth={s.emphasis ? 2.5 : 1.5}
-                strokeDasharray={s.emphasis ? undefined : '4 4'}
+                strokeDasharray={
+                  s.emphasis ? undefined : MUTED_DASHES[mutedIndex(series, i) % MUTED_DASHES.length]
+                }
                 dot={{ r: s.emphasis ? 3 : 0 }}
                 activeDot={{ r: 5 }}
                 // null 구간에서 선을 잇지 않는다. 이으면 없는 데이터를 추정해

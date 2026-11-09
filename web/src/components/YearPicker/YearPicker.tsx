@@ -20,15 +20,19 @@ export interface YearPickerProps {
 }
 
 /**
- * 분석 연도 선택.
+ * 분석 연도 선택 — 직각 칩, 모노 숫자.
  *
  * 원본 Streamlit 판의 `st.multiselect("분석 연도 선택", ...)`(`research.py:614`)
  * 이 하던 일이다. 이관에서 빠지면서 추이·평균·순위가 **언제나 전 연도**로
  * 그려졌다 — 최근 3년만 보고 싶어도 방법이 없었다.
  *
- * 체크박스 대신 토글 버튼을 쓴다. 연도는 값이 짧고 개수가 고정이라 한 줄에
+ * 체크박스 대신 토글 칩을 쓴다. 연도는 값이 짧고 개수가 고정이라 한 줄에
  * 늘어놓을 수 있고, 그러면 "무엇이 빠졌는지" 를 훑어서 알 수 있다. 세로로
  * 쌓인 체크박스 목록에서는 그게 안 보인다.
+ *
+ * 선택된 칩은 **잉크 채움**이지 주홍이 아니다(DESIGN.md §2). 주홍은 기준 연도를
+ * 가리키는 작은 사각 하나뿐이다 — 글리프(■)가 아니라 CSS 로 그린다. 모노 글꼴
+ * 서브셋에 그 글자가 없어 폴백 글꼴의 다른 모양이 섞여 나온다.
  */
 export function YearPicker({ available, value, onChange, baseYear }: YearPickerProps) {
   const sorted = useMemo(() => [...available].sort((a, b) => a - b), [available])
@@ -44,7 +48,7 @@ export function YearPicker({ available, value, onChange, baseYear }: YearPickerP
 
   if (sorted.length === 0) {
     return (
-      <p className="m-0 text-sm text-[var(--text-muted)]">연도를 불러오는 중…</p>
+      <p className="m-0 text-body text-[var(--text-muted)]">연도를 불러오는 중…</p>
     )
   }
 
@@ -69,20 +73,21 @@ export function YearPicker({ available, value, onChange, baseYear }: YearPickerP
               aria-label={isBase ? `${year}년 (기준 연도)` : `${year}년`}
               onClick={() => toggle(year)}
               className={cn(
-                `tabular rounded-[var(--radius-full)] border px-[var(--spacing-4)]
-                 py-[var(--spacing-2)] text-sm transition-colors`,
+                `tabular inline-flex h-[2.25rem] items-center rounded-none border
+                 px-[var(--spacing-3)] font-[family-name:var(--font-numeric)]
+                 text-body font-medium transition-colors duration-[var(--duration-fast)]`,
                 checked
-                  ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                  : `border-[var(--border-subtle)] bg-transparent text-[var(--text-muted)]
-                     hover:border-[var(--border-strong)]`,
-                isBase && checked && 'font-semibold',
+                  ? 'border-[var(--action-bg)] bg-[var(--action-bg)] text-[var(--text-on-action)]'
+                  : `border-[var(--border-subtle)] bg-transparent text-[var(--text-secondary)]
+                     hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]`,
               )}
             >
               {year}
               {isBase && (
-                <span aria-hidden="true" className="ml-[var(--spacing-1)] text-[var(--accent)]">
-                  ●
-                </span>
+                <span
+                  aria-hidden="true"
+                  className="ml-[var(--spacing-1)] inline-block h-[0.375rem] w-[0.375rem] bg-[var(--accent)]"
+                />
               )}
             </button>
           )

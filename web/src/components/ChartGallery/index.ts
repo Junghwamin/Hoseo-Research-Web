@@ -5,3 +5,5 @@
 
 export { ChartGallery } from './ChartGallery'
 export type { ChartGalleryProps } from './ChartGallery'
+export { revokeChartImages, useChartImage } from './useChartImage'
+export type { ChartImage, ChartImageStatus, ChartParams } from './useChartImage'

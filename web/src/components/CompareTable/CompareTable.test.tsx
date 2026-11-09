@@ -282,7 +282,7 @@ describe('CompareTable — 대상 대학 강조', () => {
 describe('CompareTable — 경계', () => {
   it('빈 배열이면 표 대신 안내를 낸다', () => {
     render(<CompareTable rows={[]} caption={CAPTION} />)
-    expect(screen.getByText(/표시할 데이터가 없다/)).toBeInTheDocument()
+    expect(screen.getByText(/표시할 데이터가 없습니다/)).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
   })
 
@@ -359,7 +359,7 @@ describe('CompareTable — 경계', () => {
   it('loading 은 빈 배열보다 먼저다', () => {
     render(<CompareTable rows={[]} caption={CAPTION} loading />)
     expect(screen.getByTestId('compare-skeleton')).toBeInTheDocument()
-    expect(screen.queryByText(/표시할 데이터가 없다/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/표시할 데이터가 없습니다/)).not.toBeInTheDocument()
   })
 })
 

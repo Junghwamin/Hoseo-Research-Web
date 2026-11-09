@@ -35,11 +35,9 @@ export interface StepActions {
  */
 export interface StepDefinition {
   readonly id: Step
-  /** 진행 표시에 쓰는 짧은 이름. */
+  /** 진행 표시에 쓰는 짧은 이름. `store/types.ts` 의 STEPS 와 같다. */
   readonly title: string
-  /** 화면 상단의 작은 라벨. */
-  readonly eyebrow: string
-  /** 이 단계에서 무엇을 하는지 한 줄. */
+  /** 이 단계에서 무엇을 하는지 한두 문장. 합쇼체. */
   readonly description: string
   readonly Component: (props: StepProps) => ReactNode
   /**

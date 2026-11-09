@@ -111,7 +111,21 @@ describe('YearTable', () => {
 
   it('연도가 없어도 터지지 않는다', () => {
     setup({ trend: {}, averages: {}, rankChanges: {} })
-    expect(screen.getByText('표시할 연도가 없다.')).toBeInTheDocument()
+    expect(screen.getByText('표시할 연도가 없습니다.')).toBeInTheDocument()
+  })
+
+  it('가로 스크롤 영역이 이름을 가진 region 이고 키보드로 닿는다', () => {
+    setup()
+    // 휴대폰에서 표는 가로로 넘친다. 스크롤 영역에 포커스가 가지 않으면 키보드
+    // 사용자는 오른쪽 열을 영영 못 본다(axe: scrollable-region-focusable).
+    const region = screen.getByRole('region', { name: /호서대학교 연도별/ })
+    expect(region).toHaveAttribute('tabindex', '0')
+  })
+
+  it('숫자 셀은 줄바꿈하지 않는다', () => {
+    setup()
+    // 390px 에서 "0.5246" 이 "0.5" / "246" 으로 갈라졌다. 좁으면 스크롤이 맡는다.
+    expect(screen.getByText('0.5246').className).toMatch(/whitespace-nowrap/)
   })
 
   it('axe 위반이 없다', async () => {

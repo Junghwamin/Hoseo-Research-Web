@@ -1,105 +1,128 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { describe, it, expect, vi } from 'vitest'
 import { axe } from 'vitest-axe'
-import { describe, it, expect } from 'vitest'
 
-import { decideHeroMode, type HeroEnvironment } from './capability'
+import type { DatasetInfo } from '../../api/client'
 import { HomeHero } from './HomeHero'
 
-const capable: HeroEnvironment = {
-  prefersReducedMotion: false,
-  hasWebGL: true,
-  cores: 8,
-  memoryGb: 8,
-  viewportWidth: 1440,
+/**
+ * 활자 히어로 + 「자료 현황」 패널.
+ *
+ * 사진·3D 가 없으므로 "장식이 실패해도 글은 남는다" 는 걱정이 사라졌다. 대신
+ * **숫자를 지어내지 않는다** 는 계약이 생겼다 — 패널의 대학 수·연도·권역 수와
+ * 범위 문장은 전부 `/api/data` 에서 온다. 서버 문장은 여기서 직접 만든다:
+ * `stats.fixture` 의 문구에 기대면 그쪽이 바뀔 때 이 테스트가 이유 없이 깨진다.
+ */
+
+const SCOPE_NOTE =
+  '전국순위는 대학알리미에 등재된 사립 133개교 기준입니다. 국공립대·과기원은 집계에 포함되지 않습니다.'
+
+const dataset: DatasetInfo = {
+  years: [2016, 2017, 2026],
+  regions: ['충청권'],
+  universities: ['호서대학교'],
+  universityCount: 133,
+  nationalRankScopeNote: SCOPE_NOTE,
+  overlayYears: [],
 }
 
-describe('decideHeroMode — 언제 3D 를 포기하는가', () => {
-  it('넉넉한 환경이면 3D 를 그린다', () => {
-    expect(decideHeroMode(capable)).toBe('three')
+function setup(props: Partial<React.ComponentProps<typeof HomeHero>> = {}) {
+  const onStart = vi.fn()
+  const onRetry = vi.fn()
+  const utils = render(
+    <HomeHero dataset={dataset} onStart={onStart} onRetry={onRetry} {...props} />,
+  )
+  return { ...utils, onStart, onRetry }
+}
+
+describe('HomeHero', () => {
+  it('표제와 부제를 보여준다', () => {
+    setup()
+    expect(
+      screen.getByRole('heading', { level: 1, name: '우리 대학은 몇 번째인가' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/1인당 SCI급·SCOPUS 논문 수/)).toBeInTheDocument()
   })
 
-  it('모션을 줄이겠다고 했으면 무조건 정적이다', () => {
-    // 성능이 아무리 좋아도 사용자 의사가 우선이다
-    expect(decideHeroMode({ ...capable, prefersReducedMotion: true })).toBe('static')
+  it('h1 의 접근성 이름은 강조 span 과 무관하게 「우리 대학은 몇 번째인가」다', () => {
+    // "몇 번째" 만 주홍으로 칠하려고 span 을 끼운다. 그 span 이 이름을 쪼개거나
+    // 띄어쓰기를 먹으면 e2e(`heading, { name }`)와 낭독기가 다른 제목을 듣는다.
+    setup()
+    const h1 = screen.getByRole('heading', { level: 1 })
+    expect(h1).toHaveAccessibleName('우리 대학은 몇 번째인가')
+    expect(within(h1).getByText('몇 번째').className).toMatch(/var\(--accent\)/)
   })
 
-  it('WebGL 이 없으면 정적이다', () => {
-    expect(decideHeroMode({ ...capable, hasWebGL: false })).toBe('static')
+  it('자료 현황 패널이 서버의 범위 문장을 그대로 보여준다', () => {
+    setup()
+    const panel = screen.getByTestId('data-panel')
+    expect(within(panel).getByText(SCOPE_NOTE)).toBeInTheDocument()
+    // 숫자도 전부 응답에서 온다 — 대학 수, 최신 공시 연도.
+    expect(within(panel).getByText('133')).toBeInTheDocument()
+    expect(within(panel).getByText('2026')).toBeInTheDocument()
   })
 
-  it('좁은 화면에서는 정적이다', () => {
-    // 모바일에서 히어로가 본문을 밀어내면 분석 도구로서 쓸모가 없다
-    expect(decideHeroMode({ ...capable, viewportWidth: 390 })).toBe('static')
+  it('자료 범위 띠는 출처·공시 연도·갱신 주기 세 항목이다', () => {
+    setup()
+    const list = screen.getByRole('list', { name: '자료 범위' })
+    expect(within(list).getByText('출처 대학알리미 「7-가. 전임교원의 연구 실적」')).toBeInTheDocument()
+    // 연도 범위는 dataset.years 의 양끝이다. 상수가 아니다.
+    expect(within(list).getByText('공시 2016–2026년')).toBeInTheDocument()
+    expect(within(list).getByText('매년 8월 공시 반영')).toBeInTheDocument()
   })
 
-  it('코어가 적으면 정적이다', () => {
-    expect(decideHeroMode({ ...capable, cores: 2 })).toBe('static')
+  it('데이터가 아직 없으면 숫자 항목을 비워 두지 않고 생략한다', () => {
+    setup({ dataset: null })
+    expect(document.body.textContent).not.toMatch(/undefined|NaN|Infinity|–년|개교 기준/)
+    // 글은 데이터 없이도 그대로다 — 콜드 스타트 중 첫 화면이 빈 종이가 되지 않는다.
+    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument()
+    expect(screen.getByText(/대학알리미 「7-가/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '분석 시작' })).toBeInTheDocument()
+    expect(screen.getByTestId('data-panel')).toBeInTheDocument()
   })
 
-  it('메모리가 적으면 정적이다', () => {
-    expect(decideHeroMode({ ...capable, memoryGb: 2 })).toBe('static')
+  it('불러오지 못하면 패널 안에서 이유를 말하고 다시 시도할 수 있다', async () => {
+    const { onRetry } = setup({ dataset: null, datasetError: '서버가 요청을 처리하지 못했습니다(503).' })
+    const panel = screen.getByTestId('data-panel')
+    expect(within(panel).getByRole('alert')).toHaveTextContent('서버가 요청을 처리하지 못했습니다(503).')
+    await userEvent.click(within(panel).getByRole('button', { name: '다시 시도' }))
+    expect(onRetry).toHaveBeenCalledTimes(1)
+    // 히어로의 글은 오류와 무관하게 남는다.
+    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument()
   })
 
-  it('사양을 모르는 것은 저사양이 아니다', () => {
-    // Safari 는 deviceMemory 를 제공하지 않는다. 모른다고 끄면 맥 사용자
-    // 전체가 정적 화면을 본다.
-    expect(decideHeroMode({ ...capable, cores: undefined, memoryGb: undefined })).toBe(
-      'three',
-    )
+  it('분석 시작을 누르면 onStart 가 불린다', async () => {
+    const { onStart } = setup()
+    await userEvent.click(screen.getByRole('button', { name: '분석 시작' }))
+    expect(onStart).toHaveBeenCalledTimes(1)
   })
 
-  it('경계값에서 정확히 갈린다', () => {
-    expect(decideHeroMode({ ...capable, cores: 4 })).toBe('three')
-    expect(decideHeroMode({ ...capable, cores: 3 })).toBe('static')
-    expect(decideHeroMode({ ...capable, viewportWidth: 640 })).toBe('three')
-    expect(decideHeroMode({ ...capable, viewportWidth: 639 })).toBe('static')
-  })
-})
-
-describe('HomeHero — 렌더', () => {
-  // jsdom 에는 WebGL 이 없다. 따라서 여기서는 **정적 경로만** 검사할 수 있고,
-  // 그것이 맞다 — 3D 가 안 되는 환경에서 무엇이 보이는지가 중요하다.
-
-  it('제목과 설명을 항상 보여준다', () => {
-    render(<HomeHero title="연구실적 분석 포털" subtitle="대학알리미 기반 분석" />)
-    expect(screen.getByRole('heading', { name: '연구실적 분석 포털' })).toBeInTheDocument()
-    expect(screen.getByText('대학알리미 기반 분석')).toBeInTheDocument()
+  it('장식 레이어는 보조 기술에서 감춘다', () => {
+    setup()
+    expect(screen.getByTestId('hero-static')).toHaveAttribute('aria-hidden', 'true')
   })
 
-  it('3D 를 못 그려도 글은 읽을 수 있다', async () => {
-    // 장식이 실패해도 내용은 남아야 한다
-    render(<HomeHero title="제목" subtitle="부제" />)
-    await waitFor(() => {
-      expect(screen.getByTestId('hero-static')).toBeInTheDocument()
-    })
-    expect(screen.getByRole('heading', { name: '제목' })).toBeInTheDocument()
+  it('사진·캔버스가 없다', () => {
+    setup()
+    expect(document.querySelector('img, canvas')).toBeNull()
   })
 
-  it('캔버스는 장식이라 보조 기술에서 감춘다', async () => {
-    render(<HomeHero title="제목" subtitle="부제" />)
-    await waitFor(() => {
-      const decoration = screen.getByTestId('hero-static')
-      expect(decoration).toHaveAttribute('aria-hidden', 'true')
-    })
-  })
-
-  it('긴 제목이 들어가도 렌더가 깨지지 않는다', () => {
-    const long = '한국과학기술원부설한국정보통신대학교세종캠퍼스 연구실적 분석 포털'
-    render(<HomeHero title={long} subtitle="부제" />)
-    expect(screen.getByRole('heading', { name: long })).toBeInTheDocument()
-  })
-
-  it('HTML 문자열을 마크업으로 해석하지 않는다', () => {
-    render(<HomeHero title="<b>굵게</b>" subtitle="부제" />)
+  it('서버 문장을 마크업으로 해석하지 않는다', () => {
+    setup({ dataset: { ...dataset, nationalRankScopeNote: '<b>굵게</b>' } })
     expect(screen.getByText('<b>굵게</b>')).toBeInTheDocument()
-    expect(document.querySelector('h1 b')).toBeNull()
+    expect(document.querySelector('b')).toBeNull()
   })
-})
 
-describe('HomeHero — 접근성', () => {
+  it('세리프 글꼴 별칭을 쓰지 않는다 — 표제도 Pretendard 700 이다', () => {
+    setup()
+    const h1 = screen.getByRole('heading', { level: 1 })
+    expect(h1.className).not.toMatch(/font-serif/)
+    expect(h1.className).toMatch(/\bfont-bold\b/)
+  })
+
   it('axe 위반이 없다', async () => {
-    const { container } = render(<HomeHero title="제목" subtitle="부제" />)
-    await waitFor(() => expect(screen.getByTestId('hero-static')).toBeInTheDocument())
+    const { container } = setup()
     expect(await axe(container)).toHaveNoViolations()
   })
 })

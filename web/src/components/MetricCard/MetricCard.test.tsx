@@ -91,10 +91,30 @@ describe('MetricCard — 증감 방향 (V09 회귀 잠금)', () => {
   })
 })
 
+describe('MetricCard — 크기와 단위', () => {
+  it('answer 크기는 kpi 토큰을 쓰고 단위는 작게 붙인다', () => {
+    // "답 하나" 규칙: 2단계에서 전국순위만 이 크기다. 나머지는 kpi-sub.
+    render(<MetricCard label="전국순위" value="71" unit="위" size="answer" />)
+    expect(screen.getByText('71').className).toMatch(/text-kpi(?!-sub)/)
+    expect(screen.getByText('위')).toBeInTheDocument()
+  })
+
+  it('기본 크기는 kpi-sub 다', () => {
+    render(<MetricCard label="권역순위" value="17" unit="위" />)
+    expect(screen.getByText('17').className).toMatch(/text-kpi-sub/)
+  })
+})
+
 describe('MetricCard — 경계 케이스', () => {
   it('value 가 null 이면 값 없음 기호를 그린다', () => {
     render(<MetricCard label="권역순위" value={null} />)
     expect(screen.getByText('—')).toBeInTheDocument()
+  })
+
+  it('값 없음은 큰 숫자 자리에 큰 대시가 아니라 작은 대시와 음성 설명이다', () => {
+    render(<MetricCard label="권역순위" value={null} />)
+    expect(screen.getByText('—').className).toMatch(/text-body/)
+    expect(screen.getByText('자료 없음')).toHaveClass('sr-only')
   })
 
   it('value 가 "0" 이면 값 없음이 아니라 0 을 그린다', () => {

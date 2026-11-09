@@ -18,7 +18,7 @@ import type { StepProps } from './types'
  * | 권역 선택 | 다캠퍼스면 선택 위젯 | 없음(서버가 조용히 판정) | 둘 이상이면 선택 |
  * | 비교군 | multiselect | 없음(서버 기본값 고정) | 체크박스 목록 |
  *
- * **입력은 전부 여기 지역 상태로 들고 있다가 "불러오기" 에서 한 번에 확정한다.**
+ * **입력은 전부 여기 지역 상태로 들고 있다가 "분석하기" 에서 한 번에 확정한다.**
  * 고를 때마다 스토어에 밀어 넣으면 "대학은 바꿨는데 비교군은 이전 것" 같은
  * 중간 상태가 생기고, 그게 V17 이 났던 모양이다.
  */
@@ -70,7 +70,7 @@ export function Step1Target({ state, dataset, actions }: StepProps) {
   // `useEffect` 는 처음 마운트될 때도 돈다. 그대로 두면 2단계에서 1단계로
   // 돌아올 때마다 선택이 지워지는데, 화면에는 "기본 비교군" 이라고 뜨면서
   // 서버에는 여전히 고른 비교군으로 분석된 결과가 남아 있다. 그 상태에서
-  // 다시 "불러오기" 를 누르면 **말없이 기본 비교군으로 바뀐다** — 방금
+  // 다시 "분석하기" 를 누르면 **말없이 기본 비교군으로 바뀐다** — 방금
   // 서버에서 고친 것과 같은 종류의 사고다.
   //
   // 그래서 "바뀌었는가" 를 직접 본다. 마운트는 변화가 아니다.
@@ -108,20 +108,18 @@ export function Step1Target({ state, dataset, actions }: StepProps) {
           label="대상 대학"
           data-testid="university-input"
           options={dataset?.universities ?? []}
+          loading={!dataset}
           value={university}
           onChange={setUniversity}
-          placeholder="이름을 입력하거나 목록에서 고른다"
+          placeholder="대학 이름 검색"
           hint={
             dataset && latestYear
-              ? `연도마다 집계 대학이 다르다. ${latestYear}년 기준 ${dataset.universityCount}개교`
-              : '목록을 불러오는 중…'
+              ? `${latestYear}년 공시 기준 ${dataset.universityCount}개교 · 연도마다 집계 대학이 다릅니다`
+              : undefined
           }
         />
 
-        <Field
-          label="기준 연도"
-          hint="비교군 표와 전년대비가 보는 해다."
-        >
+        <Field label="기준 연도" hint="비교표와 전년 대비 증감의 기준 연도입니다.">
           {(field) => (
             <select
               {...field}
@@ -129,7 +127,7 @@ export function Step1Target({ state, dataset, actions }: StepProps) {
               value={effectiveYear ?? ''}
               onChange={(e) => setYear(Number(e.target.value))}
               disabled={!dataset}
-              className={CONTROL_CLASS}
+              className={`${CONTROL_CLASS} tabular font-[family-name:var(--font-numeric)]`}
             >
               {/* 고른 연도 안에서만 고를 수 있다. 원본도 기준 연도 선택지를
                   분석 연도로 제한했다(research.py:627). 제한하지 않으면
@@ -152,18 +150,21 @@ export function Step1Target({ state, dataset, actions }: StepProps) {
           라벨이 되어 접근성 검사가 걸린다. 묶음은 스스로 이름을 갖는다
           (`role="group" aria-label`). */}
       <div className="flex flex-col gap-[var(--spacing-2)]">
-        <p className="m-0 text-sm font-medium text-[var(--text-secondary)]">분석 연도</p>
+        <p className="eyebrow m-0 text-[var(--text-secondary)]">분석 연도</p>
         <YearPicker
           available={availableYears}
           value={effectiveYears}
           onChange={handleYears}
           baseYear={effectiveYear}
         />
-        <p data-testid="year-summary" className="m-0 text-xs text-[var(--text-muted)]">
-          {effectiveYears.length === availableYears.length
-            ? `추이·평균·순위에 남길 해. 지금은 ${availableYears.length}개년 전부다.`
-            : `${effectiveYears.length}개년 선택 · 전체 ${availableYears.length}개년`}
-        </p>
+        {/* 목록이 오기 전에는 그리지 않는다. "지금은 0개년 전부입니다" 로 읽힌다. */}
+        {dataset && (
+          <p data-testid="year-summary" className="m-0 text-meta text-[var(--text-muted)]">
+            {effectiveYears.length === availableYears.length
+              ? `추이·평균·순위에 들어갈 해입니다. 지금은 ${availableYears.length}개년 전부입니다.`
+              : `${effectiveYears.length}개년 선택 · 전체 ${availableYears.length}개년`}
+          </p>
+        )}
       </div>
 
       {/* 권역은 **둘 이상일 때만** 묻는다. 하나뿐인데 고르라고 하면 의미
@@ -171,8 +172,8 @@ export function Step1Target({ state, dataset, actions }: StepProps) {
       {(regions.data?.length ?? 0) > 1 && (
         <Field
           label="권역"
-          hint={`${university} 는 여러 권역에 캠퍼스가 있다. 어느 캠퍼스 기준인지 골라야 순위와 권역평균이 맞는다.`}
-          error={needsRegion ? '권역을 골라야 분석할 수 있다' : null}
+          hint={`${university}는 캠퍼스가 여러 권역에 있습니다. 기준 캠퍼스를 고르면 권역 순위와 평균이 정해집니다.`}
+          error={needsRegion ? '권역을 고르면 분석할 수 있습니다' : null}
         >
           {(field) => (
             <select
@@ -182,7 +183,7 @@ export function Step1Target({ state, dataset, actions }: StepProps) {
               onChange={(e) => setRegionChoice(e.target.value || null)}
               className={CONTROL_CLASS}
             >
-              <option value="">고르세요</option>
+              <option value="">권역 선택</option>
               {regions.data?.map((r) => (
                 <option key={r} value={r}>
                   {r}
@@ -195,12 +196,10 @@ export function Step1Target({ state, dataset, actions }: StepProps) {
 
       {university && effectiveRegion && (
         <div className="flex flex-col gap-[var(--spacing-3)]">
-          <h3 className="m-0 text-heading font-semibold text-[var(--text-primary)]">
-            비교군
-          </h3>
-          <p className="m-0 text-sm text-[var(--text-secondary)]">
-            보고서의 「비교군 비교」 절과 비교 차트가 이 목록으로 만들어진다.
-            고르지 않으면 서버가 권역 상위권으로 정한다.
+          <h3 className="m-0 text-heading font-semibold text-[var(--text-primary)]">비교군</h3>
+          <p className="m-0 text-body text-[var(--text-secondary)]">
+            「비교군 비교」 절과 비교 차트에 들어가는 대학입니다. 고르지 않으면 권역 상위
+            대학으로 채웁니다.
           </p>
           <CompareGroupPicker
             rows={candidates.data ?? []}
@@ -215,9 +214,11 @@ export function Step1Target({ state, dataset, actions }: StepProps) {
       )}
 
       <div className="flex flex-wrap items-center gap-[var(--spacing-4)]">
+        {/* 검은 버튼은 한 화면에 하나다. 이미 불러온 뒤에는 「다음」이 주 행동이고,
+            여기는 "바꾼 것을 다시 반영" 하는 보조 행동이 된다. */}
         <Button
-          variant="primary"
-          size="lg"
+          variant={state.stats ? 'secondary' : 'primary'}
+          size={state.stats ? 'md' : 'lg'}
           data-testid="load-button"
           disabled={!canLoad}
           busy={state.loading}
@@ -234,12 +235,12 @@ export function Step1Target({ state, dataset, actions }: StepProps) {
             })
           }
         >
-          분석 불러오기
+          {state.stats ? '다시 분석' : '분석하기'}
         </Button>
 
         {state.stats && (
-          <p data-testid="load-summary" className="m-0 text-sm text-[var(--text-secondary)]">
-            <strong className="text-[var(--text-primary)]">{state.stats.university}</strong>
+          <p data-testid="load-summary" className="m-0 text-body text-[var(--text-secondary)]">
+            <strong className="font-semibold text-[var(--text-primary)]">{state.stats.university}</strong>
             {' · '}
             {state.stats.regionName} · 기준 {state.stats.year}년 · 분석{' '}
             {state.stats.years.length}개년 · 비교군 {state.stats.compareGroup.length}개교
@@ -248,7 +249,7 @@ export function Step1Target({ state, dataset, actions }: StepProps) {
       </div>
 
       {state.stats?.compareGroupNote && (
-        <p data-testid="compare-note" className="m-0 text-xs text-[var(--text-muted)]">
+        <p data-testid="compare-note" className="m-0 text-meta text-[var(--text-muted)]">
           {state.stats.compareGroupNote}
         </p>
       )}

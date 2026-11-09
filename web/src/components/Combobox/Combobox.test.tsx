@@ -34,12 +34,28 @@ function setup(props: Partial<React.ComponentProps<typeof Combobox>> = {}) {
       options={대학}
       value={null}
       onChange={onChange}
-      placeholder="대학 이름을 입력하거나 목록에서 고른다"
+      placeholder="대학 이름 검색"
       {...props}
     />,
   )
   return { onChange, user: userEvent.setup() }
 }
+
+describe('Combobox — 목록을 받는 중', () => {
+  it('아직 안 왔을 뿐인 목록을 "대학이 없다" 고 말하지 않는다', () => {
+    // 배포본은 화면이 CDN 에서 먼저 뜨고, 목록은 함수가 깨어난 뒤에 온다.
+    setup({ options: [], loading: true })
+
+    expect(screen.getByText('목록을 불러오는 중…')).toBeInTheDocument()
+    expect(screen.queryByText('고를 수 있는 대학이 없습니다')).toBeNull()
+  })
+
+  it('받은 목록이 정말 비었으면 그렇게 말한다', () => {
+    setup({ options: [] })
+
+    expect(screen.getByText('고를 수 있는 대학이 없습니다')).toBeInTheDocument()
+  })
+})
 
 describe('Combobox — 목록에서 고르기', () => {
   it('타이핑하면 일치하는 것만 남는다', async () => {
@@ -102,7 +118,9 @@ describe('Combobox — 목록에서 고르기', () => {
     await user.click(input)
     await user.type(input, '없는대학교')
     // 열려 있는 동안에는 왜 못 고르는지 말해 준다
-    expect(screen.getByRole('status')).toHaveTextContent('일치하는 대학이 없다')
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '일치하는 대학이 없습니다. 철자를 확인해 주세요',
+    )
 
     await user.keyboard('{Enter}')
     await user.tab()
@@ -141,8 +159,10 @@ describe('Combobox — 경계', () => {
     // 닫힌 상태의 빈 후보 목록을 그대로 읽으면 **아무것도 치기 전에**
     // "일치하는 대학이 없다" 가 뜬다. 쓸 수 있는 화면이 못 쓰는 화면처럼 보인다.
     setup()
-    expect(screen.getByRole('status')).toHaveTextContent(`${대학.length}개교에서 고른다`)
-    expect(screen.getByRole('status')).not.toHaveTextContent('없다.')
+    expect(screen.getByRole('status')).toHaveTextContent(
+      `${대학.length}개교 중에서 고를 수 있습니다`,
+    )
+    expect(screen.getByRole('status')).not.toHaveTextContent('없습니다.')
   })
 
   it('몇 개 중 몇 개가 보이는지 알려준다', async () => {
@@ -150,8 +170,11 @@ describe('Combobox — 경계', () => {
     const input = screen.getByRole('combobox', { name: '대상 대학' })
     await user.click(input)
     await user.type(input, '대')
-    // 134개 중 어디쯤인지 모르면 더 칠지 스크롤할지 판단할 수 없다
-    expect(screen.getByRole('status')).toHaveTextContent(`${대학.length}개`)
+    // 134개 중 어디쯤인지 모르면 더 칠지 스크롤할지 판단할 수 없다.
+    // 여섯 이름 전부 '대' 를 품고 있으므로 전부 일치한다.
+    expect(screen.getByRole('status')).toHaveTextContent(
+      `${대학.length}개교 중 ${대학.length}개 일치`,
+    )
   })
 })
 

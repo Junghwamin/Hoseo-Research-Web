@@ -68,7 +68,7 @@ describe('CompareGroupPicker', () => {
   it('기본값 상태와 직접 고른 상태를 구분해 알린다', () => {
     const { rerender } = setup()
     expect(screen.getByTestId('compare-picker-summary')).toHaveTextContent(
-      '서버 기본 비교군',
+      '서버 기본 비교군 · 충청권 상위권',
     )
 
     rerender(
@@ -91,12 +91,24 @@ describe('CompareGroupPicker', () => {
 
   it('후보가 자기 자신뿐이면 그렇다고 말한다', () => {
     setup({ rows: [row('호서대학교', 1, 0.5)] })
-    expect(screen.getByText(/비교할 다른 대학이 없다/)).toBeInTheDocument()
+    expect(screen.getByText('충청권에는 비교할 다른 대학이 없습니다.')).toBeInTheDocument()
   })
 
   it('불러오지 못하면 이유를 보여준다', () => {
-    setup({ error: '없는 권역이다: 없는권' })
-    expect(screen.getByRole('alert')).toHaveTextContent('없는 권역이다')
+    // 서버 detail 이 그대로 뒤에 붙는다 — 무엇이 났는지, 왜인지 순서다.
+    setup({ error: '데이터에 없는 권역입니다: 없는권' })
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '비교군 후보를 불러오지 못했습니다. 데이터에 없는 권역입니다: 없는권',
+    )
+  })
+
+  it('선택 행은 주홍이 아니라 sunken 면이고 체크박스는 잉크색이다', () => {
+    // 주홍은 가리키는 데만 쓴다(DESIGN.md §2). 1단계의 주홍 두 자리는 현재 단계
+    // 밑줄과 기준 연도 표시가 이미 차지하고 있다.
+    setup({ value: ['순천향대학교'] })
+    const box = screen.getByRole('checkbox', { name: /순천향대학교/ })
+    expect(box.className).toMatch(/accent-\[var\(--text-primary\)\]/)
+    expect(box.closest('label')?.className).not.toMatch(/accent/)
   })
 
   it('axe 위반이 없다', async () => {

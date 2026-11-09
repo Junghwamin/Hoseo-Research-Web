@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 
+import { CONTROL_CLASS } from '../../design/ui'
 import { cn } from '../../lib/cn'
 import { filterOptions } from './filter'
 
@@ -13,6 +14,8 @@ export interface ComboboxProps {
   readonly placeholder?: string
   readonly hint?: string
   readonly disabled?: boolean
+  /** 목록을 받는 중이다. 빈 목록과 구분해야 "대학이 없다" 고 말하지 않는다. */
+  readonly loading?: boolean
   readonly className?: string
   readonly 'data-testid'?: string
 }
@@ -38,6 +41,7 @@ export function Combobox({
   placeholder,
   hint,
   disabled,
+  loading,
   className,
   'data-testid': testId,
 }: ComboboxProps) {
@@ -147,15 +151,18 @@ export function Combobox({
   }, [open, activeIndex])
 
   // 닫혀 있을 때는 `matches` 가 빈 배열이다. 그걸 그대로 읽으면 **아무것도
-  // 치기 전에** "일치하는 대학이 없다" 가 뜬다 — 목록이 비어 있다는 뜻으로
+  // 치기 전에** "일치하는 대학이 없습니다" 가 뜬다 — 목록이 비어 있다는 뜻으로
   // 읽혀서, 쓸 수 있는 화면을 못 쓰는 화면처럼 보이게 만든다.
-  const statusText = empty
-    ? '고를 수 있는 대학이 없다'
+  // 문구 5종은 설계 §6.2 의 것이다(e2e 가 "N개교 중" 을 읽는다).
+  const statusText = loading
+    ? '목록을 불러오는 중…'
+    : empty
+      ? '고를 수 있는 대학이 없습니다'
     : !open
-      ? `${options.length}개교에서 고른다`
+      ? `${options.length}개교 중에서 고를 수 있습니다`
       : matches.length === 0
-        ? '일치하는 대학이 없다. 철자를 확인할 것'
-        : `${options.length}개 중 ${matches.length}개`
+        ? '일치하는 대학이 없습니다. 철자를 확인해 주세요'
+        : `${options.length}개교 중 ${matches.length}개 일치`
 
   return (
     <div
@@ -166,7 +173,7 @@ export function Combobox({
         if (!rootRef.current?.contains(e.relatedTarget as Node | null)) close(true)
       }}
     >
-      <label htmlFor={baseId} className="text-sm font-medium text-[var(--text-secondary)]">
+      <label htmlFor={baseId} className="eyebrow text-[var(--text-secondary)]">
         {label}
       </label>
 
@@ -195,14 +202,9 @@ export function Combobox({
         }}
         onFocus={() => !empty && setOpen(true)}
         onKeyDown={onKeyDown}
-        className="
-          w-full rounded-[var(--radius-md)] border border-[var(--border-strong)]
-          bg-[var(--surface-raised)] px-[var(--spacing-3)] py-[var(--spacing-2)]
-          text-sm text-[var(--text-primary)]
-          transition-colors duration-[var(--duration-fast)]
-          hover:enabled:border-[var(--accent)]
-          disabled:cursor-not-allowed disabled:bg-[var(--surface-sunken)] disabled:opacity-60
-        "
+        // 입력 외형은 Field 의 컨트롤과 같다(44px, 직각, 1px 선). 따로 적으면
+        // 같은 줄의 기준 연도 select 와 높이가 어긋난다.
+        className={CONTROL_CLASS}
       />
 
       {open && (
@@ -211,12 +213,13 @@ export function Combobox({
           id={listboxId}
           role="listbox"
           aria-label={label}
+          // 드롭다운은 떠 있는 면이라 하드 오프셋 그림자다(DESIGN.md §5).
           className="
             absolute top-full z-20 mt-[var(--spacing-1)] max-h-[16rem] w-full
             list-none overflow-y-auto overscroll-contain
-            rounded-[var(--radius-md)] border border-[var(--border-strong)]
-            bg-[var(--surface-raised)] p-[var(--spacing-1)]
-            shadow-[var(--shadow-lg)]
+            rounded-none border border-[var(--border-strong)]
+            bg-[var(--surface-raised)] p-0
+            shadow-[var(--shadow-hard)]
           "
         >
           {matches.map((name, i) => (
@@ -233,11 +236,10 @@ export function Combobox({
               }}
               onMouseEnter={() => setActiveIndex(i)}
               className={cn(
-                `cursor-pointer rounded-[var(--radius-sm)]
-                 px-[var(--spacing-3)] py-[var(--spacing-2)] text-sm`,
-                i === activeIndex
-                  ? 'bg-[var(--accent-soft)] text-[var(--accent)]'
-                  : 'text-[var(--text-primary)]',
+                `cursor-pointer rounded-none px-[var(--spacing-3)] py-[var(--spacing-2)]
+                 text-body text-[var(--text-primary)]`,
+                // 활성 항목은 sunken 면 + 잉크 글자. 주홍은 가리키는 데만 쓴다.
+                i === activeIndex && 'bg-[var(--surface-sunken)]',
                 name === value && 'font-semibold',
               )}
             >
@@ -245,8 +247,8 @@ export function Combobox({
             </li>
           ))}
           {matches.length === 0 && (
-            <li className="px-[var(--spacing-3)] py-[var(--spacing-2)] text-sm text-[var(--text-muted)]">
-              일치하는 대학이 없다
+            <li className="px-[var(--spacing-3)] py-[var(--spacing-2)] text-body text-[var(--text-muted)]">
+              일치하는 대학이 없습니다
             </li>
           )}
         </ul>
@@ -254,11 +256,11 @@ export function Combobox({
 
       {/* 몇 개 중 몇 개가 보이는지 알려준다. 134개 목록에서 이 숫자가 없으면
           더 칠지 스크롤할지 판단할 수 없다. */}
-      <p id={statusId} role="status" className="m-0 text-xs text-[var(--text-muted)]">
+      <p id={statusId} role="status" className="m-0 text-meta text-[var(--text-muted)]">
         {statusText}
       </p>
       {hint && (
-        <p id={hintId} className="m-0 text-xs text-[var(--text-muted)]">
+        <p id={hintId} className="m-0 text-meta text-[var(--text-muted)]">
           {hint}
         </p>
       )}

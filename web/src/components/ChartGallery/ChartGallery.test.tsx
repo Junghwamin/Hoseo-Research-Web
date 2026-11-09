@@ -1,9 +1,10 @@
 import { render, screen, fireEvent } from '@testing-library/react'
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import { axe } from 'vitest-axe'
 
 import { CHART_KINDS } from '../../api/client'
 import { ChartGallery } from './ChartGallery'
+import { revokeChartImages } from './useChartImage'
 
 const base = {
   university: '호서대학교',
@@ -72,7 +73,7 @@ describe('ChartGallery', () => {
   it('못 그리면 보고서에도 빠진다고 알린다', () => {
     render(<ChartGallery {...base} kinds={['avg']} />)
     fireEvent.error(screen.getByRole('img'))
-    expect(screen.getByRole('alert')).toHaveTextContent('보고서에도 이 그림은 빠진다')
+    expect(screen.getByRole('alert')).toHaveTextContent('보고서에서도 빠집니다')
   })
 
   it('한글 대학명이 주소에서 깨지지 않는다', () => {
@@ -87,8 +88,110 @@ describe('ChartGallery', () => {
     expect(screen.getAllByRole('img')).toHaveLength(CHART_KINDS.length)
   })
 
+  it('종류별 비율 토큰으로 자리를 예약한다', () => {
+    // 그림이 오기 전에 높이를 잡아 두지 않으면 5장이 차례로 들어오며 화면이 튄다.
+    // 비율은 core/chart_generator.py 의 figsize 와 같은 토큰이다.
+    render(<ChartGallery {...base} kinds={['rank']} />)
+    expect(screen.getByRole('img').className).toMatch(/--chart-aspect-rank/)
+  })
+
+  it('실패한 그림만 다시 그릴 수 있다', () => {
+    render(<ChartGallery {...base} kinds={['avg', 'bar']} />)
+    fireEvent.error(screen.getAllByRole('img')[0])
+    fireEvent.click(screen.getByRole('button', { name: '다시 그리기' }))
+
+    const imgs = screen.getAllByRole('img')
+    expect(imgs).toHaveLength(2)
+    // 같은 주소를 다시 넣으면 브라우저가 실패를 캐시해 두고 재요청하지 않는다.
+    expect(imgs[0].getAttribute('src')).toMatch(/[&?]r=1\b/)
+    expect(imgs[1].getAttribute('src')).not.toMatch(/[&?]r=/)
+  })
+
+  it('figure 에 테두리가 없다 — 선은 섹션이 긋는다', () => {
+    render(<ChartGallery {...base} kinds={['rank']} />)
+    expect(screen.getByTestId('chart-rank').className).not.toMatch(/\bborder\b/)
+  })
+
+  it('캡션 번호는 Word 에 실리는 순서다', () => {
+    // 문서의 그림 번호와 화면의 번호가 같아야 "3번 그림" 이라고 말할 수 있다.
+    render(<ChartGallery {...base} kinds={['trend', 'avg', 'bar']} />)
+    expect(screen.getByTestId('chart-trend')).toHaveTextContent('01')
+    expect(screen.getByTestId('chart-avg')).toHaveTextContent('02')
+    expect(screen.getByTestId('chart-bar')).toHaveTextContent('03')
+  })
+
   it('axe 위반이 없다', async () => {
     const { container } = render(<ChartGallery {...base} kinds={['bar', 'rank']} />)
     expect(await axe(container)).toHaveNoViolations()
+  })
+})
+
+describe('ChartGallery — 브라우저 추가 데이터(overlay)', () => {
+  // jsdom 에는 fetch 도 objectURL 도 없다. 둘 다 심고 끝나면 걷는다.
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    revokeChartImages()
+  })
+
+  function stubPost() {
+    URL.createObjectURL = vi.fn(() => 'blob:overlay-1') as unknown as typeof URL.createObjectURL
+    URL.revokeObjectURL = vi.fn() as unknown as typeof URL.revokeObjectURL
+    const fetchMock = vi.fn<(input: string, init?: RequestInit) => Promise<Response>>(
+      async () =>
+        ({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'Content-Type': 'image/png' }),
+          blob: async () => new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }),
+          json: async () => ({}),
+        }) as unknown as Response,
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+
+  it('overlayKey 가 있으면 POST 로 받은 blob: 주소를 그린다', async () => {
+    // 추가 데이터는 요청 본문으로만 서버에 닿는다. GET 주소를 그대로 쓰면 서버는
+    // 기본 데이터로 그리고, Word(POST 본문에 overlay 를 싣는다)와 그림이 갈라진다.
+    const fetchMock = stubPost()
+    render(<ChartGallery {...base} kinds={['rank']} overlayKey="2027@2026-11-09T00:00:00Z" />)
+
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+    const img = await screen.findByRole('img', { name: '호서대학교 2026년 순위 변화 추이' })
+    expect(img).toHaveAttribute('src', 'blob:overlay-1')
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/chart/rank.png',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    const body = JSON.parse(fetchMock.mock.calls[0][1]?.body as string)
+    expect(body).toEqual(
+      expect.objectContaining({
+        university: '호서대학교',
+        year: 2026,
+        compareGroup: ['순천향대학교', '단국대학교'],
+        years: [2024, 2025, 2026],
+      }),
+    )
+  })
+
+  it('POST 가 실패하면 같은 오류 문구와 다시 그리기를 낸다', async () => {
+    const fetchMock = stubPost()
+    fetchMock.mockImplementationOnce(async () => ({ ok: false, status: 500 }) as Response)
+    render(<ChartGallery {...base} kinds={['rank']} overlayKey="A" />)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('보고서에서도 빠집니다')
+
+    fireEvent.click(screen.getByRole('button', { name: '다시 그리기' }))
+    const img = await screen.findByRole('img')
+    expect(img).toHaveAttribute('src', 'blob:overlay-1')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('overlayKey 가 null 이면 GET 주소 그대로다', () => {
+    const fetchMock = stubPost()
+    render(<ChartGallery {...base} kinds={['rank']} overlayKey={null} />)
+    expect(screen.getByRole('img').getAttribute('src')).toMatch(/^\/api\/chart\/rank\.png\?/)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

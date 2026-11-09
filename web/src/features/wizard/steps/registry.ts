@@ -17,42 +17,39 @@ import type { StepDefinition } from './types'
  *    아래 `assertOrdered` 가 확인한다.
  * 2. **단계 컴포넌트는 형제를 모른다.** `StepProps` 만 받는다. 옆 단계를
  *    직접 부르기 시작하면 순서를 바꿀 수 없게 된다.
+ *
+ * 설명은 결과를 말한다 — "무엇을 고른다" 가 아니라 "고르면 무엇이 정해진다"(DESIGN.md §8).
  */
 export const STEP_REGISTRY: readonly StepDefinition[] = [
   {
     id: 1,
     title: '데이터 설정',
-    eyebrow: '1단계',
-    description: '분석할 대학과 연도를 고르고, 비교군을 정한다.',
+    description: '대학과 기준 연도를 고르면 권역과 비교군이 정해집니다. 비교군은 직접 바꿀 수 있습니다.',
     Component: Step1Target,
-    blockedReason: (s) => (s.stats ? null : '먼저 분석을 불러와야 한다'),
+    blockedReason: (s) => (s.stats ? null : '분석을 먼저 불러오세요'),
   },
   {
     id: 2,
     title: '통계 확인',
-    eyebrow: '2단계',
-    description: '순위와 1인당 논문 수를 확인한다. 보고서에 실릴 숫자다.',
+    description: '보고서에 실리는 숫자입니다. 순위 변화는 양수가 개선, 음수가 하락입니다.',
     Component: Step2Metrics,
   },
   {
     id: 3,
     title: '그래프 검토',
-    eyebrow: '3단계',
-    description: '문서에 들어갈 차트 5종을 미리 본다.',
+    description: '차트 5장이 이 모습 그대로 Word 에 들어갑니다.',
     Component: Step3Charts,
   },
   {
     id: 4,
     title: 'GPT 서술',
-    eyebrow: '4단계',
-    description: '절마다 초안을 만들고 직접 고친다. 단계를 오가도 사라지지 않는다.',
+    description: '절마다 GPT 초안을 만들고 직접 다듬습니다. 다른 단계에 다녀와도 글은 남아 있습니다.',
     Component: Step4Narrative,
   },
   {
     id: 5,
     title: '보고서 생성',
-    eyebrow: '5단계',
-    description: '확인한 그대로 Word 파일을 만든다.',
+    description: '아래 내용이 그대로 문서가 됩니다. 고칠 곳이 있으면 「변경」으로 돌아갑니다.',
     Component: Step5Report,
   },
 ] as const
