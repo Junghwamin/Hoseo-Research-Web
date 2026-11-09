@@ -57,12 +57,12 @@ import { Combobox } from '../../components/Combobox/Combobox'  // 안 된다
 내부 파일을 직접 가리키면, 파일을 쪼개거나 이름을 바꾸는 순간 호출부가 전부
 깨진다. 배럴이 있으면 폴더 안쪽은 자유롭게 정리할 수 있다.
 
-### 예외가 하나 있다
+### 예외는 없다
 
-`components/HomeHero/index.ts` 는 `./scene`(three.js)을 **일부러 내보내지
-않는다.** 배럴이 내보내면 3D 를 쓰지 않는 화면의 초기 번들에도 three.js 가
-딸려 들어가, 지연 로딩 계약이 조용히 깨진다. `HomeHero` 가 실행 중에
-`import()` 로만 부른다.
+한때 `components/HomeHero/index.ts` 가 three.js 씬을 **일부러 내보내지 않는**
+예외가 있었다(배럴이 내보내면 초기 번들에 딸려 들어간다). 2026-11 리디자인에서
+3D 히어로를 지우면서 예외도 사라졌다 — 지금은 지연 청크 자체가 없다
+(`scripts/check-bundle.mjs` 의 "지연 JS 0.0 KB").
 
 ---
 
@@ -101,8 +101,7 @@ import { Combobox } from '../../components/Combobox/Combobox'  // 안 된다
 {
   id: 6,
   title: '내보내기',
-  eyebrow: '6단계',
-  description: '무엇을 하는 단계인지 한 줄.',
+  description: '무엇을 하는 단계인지 한두 문장. 합쇼체.',
   Component: Step6Something,
   // 넘어갈 수 없으면 **이유를 문자열로** 돌려준다.
   // false 를 돌려주면 회색으로 죽어 있는데 왜인지 알 수 없는 버튼이 된다.
@@ -169,17 +168,51 @@ PNG 가 유일한 표현이고, 차트 요청에 **비교군을 반드시 함께
 
 ---
 
-## 미디어
+## 글꼴과 장식
 
-`web/public/media/` 의 파일은 `scripts/fetch_media.py` 가 받아 둔 것이다.
+디자인 계약은 저장소 루트의 **`DESIGN.md`** 다(open-design `tom-modern` 의 한국어
+적응 — 중립 지면, 주홍 하나, 모서리 0, 하드 오프셋 그림자, 모노스페이스 숫자, 30px
+격자). `web/src/design/tokens.css` 는 그 계약의 컴파일된 바인딩이고 값은 거기에만 있다.
 
-- **CC0 만 쓴다.** 표시 의무가 있는 라이선스는 화면 어딘가에 크레딧을 계속
-  달고 다녀야 하는데, 그 의무를 사람이 기억해야 하는 순간 언젠가 빠진다.
-- **CDN 주소를 쓰지 않는다.** 설치본은 오프라인이라 사진이 통째로 빈다.
-- **특정 대학 캠퍼스 사진은 쓰지 않는다.** 호서대 포털에 다른 대학 건물
-  사진을 깔면 소속을 오해시킨다.
+화면은 **활자와 숫자로 선다.** 사진·그라데이션·3D·아이콘 장식이 없다. 사진을
+뺀 이유는 두 가지다 — 다른 대학 캠퍼스 사진은 소속을 오해시키고(실제로 예일대
+도서관이 들어가 있었다), 설치본은 오프라인이라 CDN 사진은 통째로 빈다.
 
-출처는 `web/public/media/CREDITS.md` 에 스크립트가 기록한다.
+- **글꼴은 번들이다.** `web/public/fonts/` 의 Pretendard Variable(한글·본문·표제·UI)과
+  Geist Mono(숫자·연도·순위·코드 — 라틴만)는 `scripts/build_fonts.py` 가 고정된 상류
+  입력(npm 타르볼, sha256 고정)에서 만든다. 산출물은 `manifest.json` 의 sha256 과
+  함께 커밋되고, `tests/contract/test_fonts_bundle.py` 가 어긋남을 잡는다. 모노는
+  숫자·라틴에만 명시적으로 건다 — 한글 문장 안의 숫자에 걸면 글꼴이 갈라진다.
+- **주홍(`--accent`)은 화면 한 장에 두 군데까지.** 현재 단계·기준 연도·대상 행처럼
+  "가리키는 것" 에만 쓴다. 누르는 것(주 버튼)은 잉크 채움이다.
+- **CDN 주소를 쓰지 않는다.** 글꼴도, 아이콘도. 아이콘 14개는 Lucide 의 획을
+  `design/ui/Icon.tsx` 에 옮겨 담았다(`LICENSES/Lucide-ISC.txt`).
+- **라이선스는 파일로 남긴다.** `web/public/fonts/CREDITS.md`, `NOTICE`.
+
+---
+
+## 요청 맥락 — 서버는 상태를 들지 않는다
+
+공개 사이트(Vercel)는 디스크가 읽기 전용이고 인스턴스마다 다르다. 그래서 사용자가
+넣는 두 가지는 **브라우저가 들고 요청마다 실어 보낸다.** 서버는 요청 안에서만 쓰고
+저장하지 않는다.
+
+| 맥락 | 어디에 사는가 | 어떻게 가는가 | 서버 |
+|---|---|---|---|
+| OpenAI 키 | `web/src/api/clientKey.ts` (`localStorage`) | `/api/narrative` 요청 헤더 `X-OpenAI-Key` | 헤더 → 서버 환경변수 → 503. 응답·로그에 남기지 않는다 |
+| 추가 데이터(overlay) | `web/src/api/overlay.ts` (`localStorage`, 2MB) | 모든 분석 요청 본문의 `overlay` | 요청마다 기본 데이터에 덧씌워 계산. 같은 해는 덮어쓴다 |
+
+- `api/client.ts` 가 둘을 스스로 싣는다. 호출부(components·features)는 모른다.
+- 추가 데이터가 있으면 본문이 없던 조회(`/api/data`·`/api/regions`·`/api/universities`)가
+  POST 로 바뀌고, 차트는 `<img src>` 대신 `POST /api/chart/{kind}.png` 를 받아 objectURL 로
+  그린다(`components/ChartGallery/useChartImage.ts`). 없으면 지금까지의 GET 그대로라
+  브라우저 캐시가 산다.
+- 서버 차트 캐시 키와 `StatsResponse.overlayHash` 에 overlay 의 digest 가 들어간다.
+  빠뜨리면 데이터를 바꾼 뒤에도 옛 그림이 나온다(전처리 캐시 사고의 재현).
+- 설정·데이터 패널의 **동작 모드**는 서버 `/api/settings` 의 `canPersist` 하나가 정한다
+  — 쓸 수 있으면(설치본·로컬) 서버에 저장하고, 없으면(공개 사이트) 브라우저에만 둔다.
+  빌드 플래그로 메뉴를 끄지 않는다. `HOSEO_FORCE_READONLY=1` 로 띄우면 개발 PC 에서
+  공개 사이트 모드를 그대로 재현한다(서버 키도 없는 것으로 친다).
 
 ---
 

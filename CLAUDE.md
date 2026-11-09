@@ -26,6 +26,8 @@ cd web && npm run build && cd ..
 uvicorn api.main:app --port 8000  # http://127.0.0.1:8000
 ```
 
+배포는 README 의 「Vercel 배포」 참조. 루트 `main.py` 는 Vercel 전용 진입점이다.
+
 ---
 
 ## 계층 구조 — 어디에 무엇을 넣는가
@@ -70,7 +72,9 @@ cd web && npm run build    # 타입검사 + 빌드 + 번들 예산
 4. `tests/conftest.py`, `pytest.ini`, `tests/fixtures/` 는 하네스다.
    통과시키려고 건드리면 스위트 전체가 거짓 통과한다.
    `tests/test_harness_guards.py` 가 감시한다.
-5. **디자인 값은 `web/src/styles/tokens.css` 밖에 존재하지 않는다.**
+5. **디자인 값은 `web/src/design/tokens.css` 밖에 존재하지 않는다.** 계약(왜 그 값인가)은
+   루트 `DESIGN.md`(open-design `tom-modern` 적응). 주홍은 화면당 두 군데, 모서리 0,
+   사용자 문구는 합쇼체·명사형.
    컴포넌트에 hex·rgb 리터럴을 쓰지 않는다. `tokens.test.ts` 가 파일:줄까지 잡는다.
 6. **꺼진 기능은 렌더 트리에 올리지 않는다.** `web/src/features.ts` 의 플래그를
    통과한 것만 그린다. `disabled` 로 흐리게 보여주지 않는다 —
@@ -90,6 +94,26 @@ cd web && npm run build    # 타입검사 + 빌드 + 번들 예산
 - **API 타입은 손으로 쓰지 않는다.** 서버 스키마를 고쳤으면
   `python scripts/export_openapi.py && cd web && npm run gen:api`.
   잊으면 `tests/api/test_openapi_drift.py` 가 잡는다.
+- **정적 서빙에 캐치올을 만들지 않는다.** `web/dist / 요청경로` 를 그대로 열면
+  `/..%2f..%2f.env` 로 폴더 밖 파일이 나간다. `api/main.py` 의 `app.frontend` 만
+  쓴다. `tests/api/test_web_serving.py` 가 잡는다.
+- **이 앱은 공개 배포된다(Vercel).** 로컬 도구였을 때 괜찮던 것이 그대로 인터넷에
+  노출된다. 엔드포인트에 인증이 없으므로, 디스크·환경변수를 건드리는 코드를
+  추가할 때는 익명 요청이 닿는다고 가정한다.
+- **`.python-version` 은 Vercel 에 올리지 않는다.** 런타임에 3.11 이 없어서 그
+  안의 uv 가 빌드를 죽인다. 값을 고치면 CI 와 갈라지므로 `.vercelignore` 로 뺐다.
+  로컬 검증은 3.11(CI)과 3.12(Vercel) 둘 다 돌린다.
+- **Vercel 은 읽기 전용이다. 서버는 상태를 들지 않는다.** 디스크에 쓰는 기능은
+  서버의 `canPersist` 가 막고(409), 화면은 같은 메뉴를 **브라우저 저장 모드**로 연다
+  — OpenAI 키는 `localStorage` + `X-OpenAI-Key` 헤더, 추가 데이터는 `localStorage` +
+  요청 본문 `overlay`(`docs/ARCHITECTURE.md` 「요청 맥락」). 빌드 플래그로 메뉴를
+  끄지 않는다. 서버 메모리·`/tmp` 에 사용자 데이터를 두면 인스턴스마다 결과가
+  달라진다. 공개 사이트 모드 재현: `HOSEO_FORCE_READONLY=1`.
+- **Vercel 함수 번들은 225MB 아래로 유지한다.** 넘으면 의존성이 런타임 설치로
+  바뀌어 콜드 스타트가 수 초 늘고 PyPI 에 묶인다(빌드 로그 `optimizing
+  dependencies`). `uvicorn[standard]` 로 되돌리면 넘는다.
+- **사용자 입력이 CPU 시간을 정하게 두지 않는다.** 공개 배포는 Active CPU 가 곧
+  쿼터다. 서술 상한(`NARRATIVE_MAX_CHARS`·`NARRATIVE_MAX_LINES`)이 그 예다.
 
 ---
 

@@ -6,6 +6,8 @@ GPT-4o 서술과 matplotlib 차트가 들어간 Word 보고서를 만든다.
 **FastAPI + React** 구성이다. [Streamlit 판](https://github.com/Junghwamin/Hoseo-Research)을
 이어받았으며, 통계·전처리·보고서 생성 로직(`core/`)은 그대로 가져왔다.
 
+공개 주소: https://hoseo-research-web.vercel.app ([Vercel 배포](#vercel-배포) 참조)
+
 ## 주요 기능
 
 - **전처리 자동화**: 대학알리미 Excel(2016~2026)을 읽어 1인당 논문 수와 순위를 산출
@@ -46,7 +48,16 @@ Vite 개발 서버가 `/api` 요청을 8000번으로 프록시한다.
 
 ### API Key
 
-GPT 서술을 쓰려면 `OPENAI_API_KEY` 가 필요하다. **평면 키**로 넣는다.
+GPT 서술을 쓰려면 OpenAI 키가 필요하다. 넣는 길은 셋이고 **화면의 「설정」이 배포
+종류에 맞는 길을 고른다.**
+
+| 어디서 | 어떻게 | 어디에 저장되는가 |
+|---|---|---|
+| 설치본·로컬 | 상단바 「설정」 → 저장 | 서버의 `.env` (`OPENAI_API_KEY=sk-…`) |
+| 공개 사이트(Vercel) | 상단바 「설정」 → 저장 | **그 브라우저의 `localStorage` 만.** 서술 요청의 `X-OpenAI-Key` 헤더로만 서버를 거친다 |
+| 운영자 | 환경변수 `OPENAI_API_KEY` | 서버 프로세스. 브라우저 키가 있으면 그쪽이 먼저다 |
+
+환경변수·`.env` 에는 **평면 키**로 넣는다.
 
 ```bash
 # .env 또는 환경변수
@@ -80,16 +91,19 @@ OPENAI_API_KEY=sk-...
 
 ```
 Hoseo-Research-Web/
+├── main.py                     ← Vercel 진입점. 로컬·설치본은 쓰지 않는다
+├── vercel.json                 ← Vercel 빌드·리전·함수 설정
 ├── core/                       ← 계산 로직. UI 프레임워크에 의존하지 않는다
 │   ├── config.py               ← 대학명·비교군·경로·GPT 설정
 │   ├── preprocess.py           ← 대학알리미 Excel → CSV
 │   ├── data_loader.py          ← CSV 로드 + 통계 계산
 │   ├── chart_generator.py      ← matplotlib 차트 5종 (보고서용)
+│   ├── fonts/                  ← 시스템 폰트가 없는 Linux 용 나눔고딕 (OFL)
 │   ├── gpt_reporter.py         ← OpenAI 서술 생성
 │   └── report_builder.py       ← python-docx 보고서 조립
 │
 ├── api/                        ← FastAPI. core/ 를 감싸기만 한다
-│   ├── main.py                 ← 진입점 + web/dist 정적 서빙
+│   ├── main.py                 ← 앱 + web/dist 정적 서빙
 │   ├── deps.py                 ← 모집단 판정(권역·비교군·분석 연도)
 │   ├── analysis.py             ← 판정 + 통계 수집. 네 엔드포인트가 여기만 쓴다
 │   ├── preprocess_service.py   ← 업로드 저장·전처리·교체(백업·롤백 포함)
@@ -108,7 +122,7 @@ Hoseo-Research-Web/
 │   │   │   ├── WizardShell.tsx ← 단계를 모른다. registry 에서 읽는다
 │   │   │   └── steps/          ← Step1~5 + registry.ts
 │   │   └── store/              ← 순수 리듀서 상태 관리
-│   ├── public/media/           ← 번들된 CC0 사진 (오프라인 대응)
+│   ├── public/fonts/           ← 번들 웹 글꼴 (Pretendard·Geist Mono, scripts/build_fonts.py 산출물)
 │   ├── e2e/                    ← Playwright
 │   └── dist/                   ← 빌드 산출물 (FastAPI 가 서빙)
 │
@@ -188,7 +202,24 @@ Hoseo-Research-Web/
   `output/` 에 반영한다. 업로드한 파일도 되돌린다 — 남겨 두면 다음 번 성공한
   실행이 그 잘못된 파일을 집어 든다.
 - **덮어쓰기 직전 내용을 백업한다** (`output/.backup-<시각>/`, 최근 3개 유지).
-- 쓰기 권한이 없는 배포에서는 `web/src/features.ts` 의 `dataUpdate` 를 끈다.
+- 쓰기 권한이 없는 배포(Vercel)에서는 409 로 거절한다. 그때 화면은 같은 패널을
+  **「데이터 추가」 모드**로 열고 상단바 버튼도 「데이터 추가」로 바뀐다 — 모드는
+  `/api/settings` 의 `canPersist` 가 정한다.
+
+### 데이터 추가 (`POST /api/dataset/preview` + `overlay`) — 공개 사이트
+
+서버에 쓸 수 없는 배포에서 새 공시 연도를 더하는 길이다. 공시 xlsx **한 개**를
+올리면 서버가 그 해의 지표·순위를 메모리에서 계산해 영문 키 행으로 돌려주고
+(`DatasetPreviewResponse`), 브라우저가 `localStorage`(2MB 상한)에 저장해 둔다.
+이후 `/api/data`·`/api/regions`·`/api/universities`·`/api/stats`·`/api/narrative`·
+`/api/report`·`POST /api/chart/{kind}.png` 요청 본문에 `overlay` 로 실리면 서버는
+**그 요청 안에서만** 기본 데이터에 덧씌워 계산한다(같은 해는 덮어쓴다). 서버에는
+아무것도 남지 않고 다른 사용자에게도 보이지 않는다.
+
+- 한 해 안의 순위는 그 해 파일만으로 완결되므로 파일 하나로 충분하다.
+- 파일은 4MB 까지(서버리스 요청 본문 상한 4.5MB 아래).
+- overlay 는 표당 6,000행, 연도 2000–2100, 기본 데이터의 권역 이름만 받는다. 어기면 422.
+- 차트 캐시 키와 `StatsResponse.overlayHash` 에 overlay 의 digest 가 들어간다.
 
 서버 실행 후 http://127.0.0.1:8000/docs 에서 직접 호출해 볼 수 있다.
 
@@ -203,6 +234,15 @@ npm run build                  # 타입검사 + 빌드 + 번들 예산
 npm run storybook              # 컴포넌트 격리 확인
 ```
 
+공개 사이트 모드(브라우저 키·데이터 추가)의 관통 테스트는 서버를 읽기 전용 강제
+스위치로 띄워 따로 돈다. 8000 이 다른 프로그램에 잡혀 있으면 `API_PORT` 를 바꾼다.
+
+```powershell
+cd web
+$env:API_PORT = '8011'; $env:HOSEO_FORCE_READONLY = '1'
+npx playwright test readonly          # e2e/readonly.spec.ts — 스위치가 없으면 통째로 건너뛴다
+```
+
 ### 이 저장소의 테스트 규약
 
 - **테스트를 고쳐서 green 을 만드는 것은 실패다.** 구현이 틀렸는지 먼저 본다.
@@ -213,7 +253,7 @@ npm run storybook              # 컴포넌트 격리 확인
 - 디자인 값(색·간격·radius)은 `web/src/design/tokens.css` 밖에 존재하지 않는다.
   `design/tokens.test.ts` 가 소스를 스캔해 위반을 파일:줄까지 잡는다.
 - **구조 규칙도 테스트가 강제한다**(`web/src/architecture.test.ts`) — 배럴을
-  거치지 않는 import, 거꾸로 가는 의존, 배럴로 새는 three.js 를 잡는다.
+  거치지 않는 import, 거꾸로 가는 의존, 단계끼리의 직접 참조를 잡는다.
   자세한 내용은 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - `scripts/export_openapi.py` 는 **반드시 프로젝트 venv 로** 실행한다. 다른
   인터프리터로 뽑으면 FastAPI 버전 차이로 스키마가 달라진다(스크립트가 막는다).
@@ -224,7 +264,6 @@ npm run storybook              # 컴포넌트 격리 확인
 Node 런타임은 사용자 PC 에 필요 없다 — `npm run build` 결과물만 들어간다.
 
 ```bash
-python scripts/fetch_media.py             # 배경 사진(CC0) 내려받기 — 최초 1회
 cd web && npm run build && cd ..          # 화면 먼저
 python installer/windows/build_windows.py # 임베디드 파이썬 + 의존성 번들
 # 이후 Inno Setup 으로 installer/windows/setup.iss 컴파일
@@ -234,6 +273,46 @@ python scripts/verify_built_bundle.py     # 빌드된 번들을 실제로 띄워
 
 `scripts/simulate_bundle.py` 는 임베디드 파이썬 없이 파일 구성만 빠르게 검증한다.
 
+## Vercel 배포
+
+FastAPI 앱이 함수 하나로 돌고, 화면(`web/dist`)은 Vercel 이 빌드해 CDN 으로 내보낸다.
+설정은 `vercel.json`·`.vercelignore`·`main.py`(진입점) 세 파일에 있다.
+
+```bash
+vercel link
+vercel deploy --prod
+```
+
+로컬과 다른 점이 몇 가지 있다.
+
+- **디스크가 읽기 전용이다.** 그래서 서버는 상태를 들지 않고, 사용자가 넣는 것은
+  **브라우저가 들고 요청마다 실어 보낸다**(`docs/ARCHITECTURE.md` 「요청 맥락」).
+  - **OpenAI 키** — 상단바 「설정」에서 넣으면 그 브라우저의 `localStorage` 에만
+    저장되고, 서술을 만들 때 `X-OpenAI-Key` 헤더로 서버를 거쳐 OpenAI 로 간다. 서버는
+    응답·로그 어디에도 남기지 않는다. 방문자마다 자기 키를 쓰므로 운영자 키를 공개
+    주소에 둘 필요가 없다.
+  - **새 공시 데이터** — 「데이터 추가」에서 공시 xlsx 를 올리면 서버가 그 해를
+    메모리에서 계산해 돌려주고(`POST /api/dataset/preview`), 브라우저가 저장해 두고
+    이후 요청에 `overlay` 로 싣는다. 다른 방문자·서버에는 아무 영향이 없다. 전원이
+    볼 기본 데이터를 바꾸려면 로컬에서 전처리한 `output/` 을 커밋해 다시 배포한다.
+- **서버 환경변수 `OPENAI_API_KEY` 를 두면 브라우저 키가 없는 방문자도 그 키를 쓴다.**
+
+  > **서술 API 에는 인증이 없다.** 운영자 키를 넣으면 주소를 아는 누구나 그 키의
+  > 크레딧을 쓸 수 있다. 브라우저 키(BYOK)만으로 쓰는 것이 기본이고, 서버 키를 둘
+  > 때는 사용량 상한을 먼저 정할 것. 브라우저 키가 있으면 언제나 그것이 먼저다.
+- **공개 사이트 모드를 로컬에서 재현하려면** `HOSEO_FORCE_READONLY=1` 로 서버를
+  띄운다 — `canPersist=false`, `/api/preprocess` 409, 서버 키 무시(「테스트」 참조).
+- **파이썬은 3.12 로 돈다.** Vercel 런타임에 3.11 이 없다. `.python-version` 을
+  올리면 빌드가 죽으므로 `.vercelignore` 로 뺐다.
+- **차트 글꼴은 `core/fonts/` 의 나눔고딕이다.** 함수에는 시스템 폰트를 깔 수 없다.
+- **요청·응답 본문은 4.5MB, 실행 시간은 300초까지다**(Hobby 기준).
+- **의존성을 늘릴 때는 번들 크기를 볼 것.** 225MB 를 넘으면 Vercel 이 의존성을
+  번들에서 빼고 새 인스턴스마다 PyPI 에서 내려받는다. 콜드 스타트가 수 초 늘고
+  PyPI 장애가 곧 서비스 장애가 된다. 빌드 로그에 `optimizing dependencies` 가
+  보이면 넘은 것이다. `uvicorn[standard]` 대신 `uvicorn` 을 쓰는 이유다.
+- **공개 주소의 CPU 사용량은 방문자가 정한다.** Hobby 의 Active CPU 는 월 4시간이고
+  다 쓰면 다음 주기까지 함수가 멈출 수 있다. 차트·보고서는 요청마다 약 1초를 쓴다.
+
 ## 기술 스택
 
 | 영역 | 사용 |
@@ -241,7 +320,8 @@ python scripts/verify_built_bundle.py     # 빌드된 번들을 실제로 띄워
 | 서버 | FastAPI, uvicorn |
 | 화면 | React 19, TypeScript, Vite, Tailwind CSS 4 |
 | 차트 | recharts(화면), matplotlib(보고서) |
-| 3D | three.js (홈 히어로만, 지연 로딩) |
+| 글꼴 | Pretendard Variable·Geist Mono 번들 (SIL OFL, `scripts/build_fonts.py`) |
+| 디자인 | `DESIGN.md` — open-design `tom-modern` 의 한국어 적응. 값은 `web/src/design/tokens.css` 에만 |
 | 데이터 | pandas, openpyxl |
 | 문서 | python-docx |
 | AI | OpenAI GPT-4o |
@@ -253,12 +333,12 @@ python scripts/verify_built_bundle.py     # 빌드된 번들을 실제로 띄워
 |---|---|
 | 화면이 비어 있다 | `cd web && npm run build` 를 먼저 했는지 확인 |
 | `데이터 파일이 없다` (503) | `python -c "from core.preprocess import main; main()"` 로 전처리 |
-| GPT 서술이 503 | `OPENAI_API_KEY` 를 **평면 키**로 설정. `[openai]` 테이블 형식은 인식되지 않는다 |
+| GPT 서술이 503 | 상단바 「설정」에서 키를 넣는다. 공개 사이트는 브라우저에, 설치본·로컬은 서버 `.env` 에 저장된다. 환경변수로 넣을 때는 **평면 키**(`OPENAI_API_KEY=sk-…`) |
 | `.env` 를 넣었는데 안 읽힌다 | 프로젝트 루트에 있는지 확인. 환경변수가 이미 설정돼 있으면 그쪽이 우선이다 |
-| 히어로 배경이 비어 있다 | `python scripts/fetch_media.py` 를 실행했는지 확인 (CDN 을 쓰지 않는다) |
+| 숫자·연도가 모노스페이스가 아니다 | `web/public/fonts/` 가 비었거나 `manifest.json` 과 어긋났다. `python -X utf8 scripts/build_fonts.py --check` 로 확인 |
 | 3단계 차트가 화면과 문서에서 다르다 | 차트 요청에 `compareGroup`·`years` 가 빠졌다. `chartUrl()` 을 거쳐 만든다 |
 | 연도를 골랐는데 422 가 난다 | 기준 연도가 분석 연도 밖이다. 화면은 기준 연도를 따라 옮겨 준다 |
-| 한글 폰트 깨짐 (차트) | Windows 는 맑은 고딕, Linux 는 `fonts-nanum` 설치 |
+| 한글 폰트 깨짐 (차트) | Windows 는 맑은 고딕. Linux 는 시스템 `fonts-nanum`, 없으면 `core/fonts/` 의 번들 폰트 |
 | CSV 한글 깨짐 | `encoding="utf-8-sig"` 사용 |
 | 컬럼 탐지 실패 | 구형 포맷은 자동 폴백. 그래도 실패하면 `find_columns()` 키워드 조정 |
 | 테스트가 `xpassed` 로 실패 | 의도적 xfail 이 통과한 것. 수정 범위가 넘쳤는지 확인 |
