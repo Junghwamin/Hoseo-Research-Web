@@ -208,7 +208,7 @@ class TestRegionResolution:
         assert body["regionName"] == "제주권"
         assert body["compareGroup"] == ["제주국제대학교"]
         assert body["compareGroupNote"] is not None
-        assert "비교군을 구성할 수 없다" in body["compareGroupNote"]
+        assert "비교군을 구성할 수 없습니다" in body["compareGroupNote"]
 
     def test_그_해에_없는_대학은_404_이고_있는_연도를_알려준다(self, client):
         # 제주국제대는 2016~2025 에만 있다. 2026 을 물으면 빈 통계를 내주는 대신

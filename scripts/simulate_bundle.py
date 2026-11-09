@@ -56,15 +56,15 @@ def stage_bundle() -> None:
     print(f"번들 구성: {files}개 파일, {size / 1024 / 1024:.1f}MB")
 
 
-def get(path: str, timeout: float = 3.0):
+def get(path: str, timeout: float = 3.0, headers: dict[str, str] | None = None):
     """GET 한 번. 오류 응답도 예외 대신 (상태, 본문) 으로 돌려준다.
 
     진단 도구가 첫 실패에서 죽으면 나머지를 못 본다. 무엇이 되고 무엇이
     안 되는지를 한 번에 보여주는 것이 이 스크립트의 목적이다.
     """
-    url = f"http://127.0.0.1:{PORT}{path}"
+    req = urllib.request.Request(f"http://127.0.0.1:{PORT}{path}", headers=headers or {})
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as r:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.status, r.read()
     except urllib.error.HTTPError as e:
         return e.code, e.read()
@@ -169,8 +169,9 @@ def main() -> int:
         checks.append(("/api/report (Word)", content[:4] == b"PK\x03\x04" and media == 5,
                        f"HTTP {status}, {len(content):,}바이트, 차트 {media}장"))
 
-        # 6) SPA 폴백 — 클라이언트 라우팅 경로도 index.html 로 떨어지는가
-        status, body = get("/some/client/route")
+        # 6) SPA 폴백 — 브라우저 이동이면 없는 경로도 index.html 로 떨어지는가.
+        #    `Accept` 가 없으면 404 가 맞다. 없는 JS 자리에 HTML 이 가면 안 된다.
+        status, body = get("/some/client/route", headers={"Accept": "text/html"})
         checks.append(("SPA 폴백", status == 200 and b'id="root"' in body, f"HTTP {status}"))
 
         print()

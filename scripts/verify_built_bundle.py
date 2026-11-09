@@ -23,9 +23,10 @@ PORT = 8199
 TARGET = b'{"university": "\\ud638\\uc11c\\ub300\\ud559\\uad50", "year": 2026}'
 
 
-def get(path, timeout=5.0):
+def get(path, timeout=5.0, headers=None):
+    req = urllib.request.Request(f"http://127.0.0.1:{PORT}{path}", headers=headers or {})
     try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{PORT}{path}", timeout=timeout) as r:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.status, r.read()
     except urllib.error.HTTPError as e:
         return e.code, e.read()
@@ -104,7 +105,8 @@ def main() -> int:
         checks.append(("/api/report (Word)", content[:4] == b"PK\x03\x04" and media == 5,
                        f"HTTP {status}, {len(content):,}바이트, 차트 {media}장"))
 
-        status, body = get("/some/client/route")
+        # 브라우저 이동일 때만 폴백한다. 없는 JS 자리에 HTML 이 가면 안 된다.
+        status, body = get("/some/client/route", headers={"Accept": "text/html"})
         checks.append(("SPA 폴백", status == 200 and b'id="root"' in body, f"HTTP {status}"))
 
         print()

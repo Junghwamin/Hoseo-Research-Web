@@ -25,7 +25,7 @@ from typing import TypeVar
 import pandas as pd
 
 import core.data_loader as dl
-from api import deps
+from api import deps, schemas
 
 T = TypeVar("T")
 
@@ -53,6 +53,9 @@ class Scope:
     compare_note: str | None
     #: 분석 연도. 추이·평균·순위 계열에 남길 해들이다. 오름차순.
     years: list[int]
+    #: 요청에 실린 브라우저 데이터셋의 digest. 없으면 None.
+    #: 차트 캐시 키와 `StatsResponse.overlayHash` 가 이 값을 쓴다.
+    overlay_hash: str | None = None
 
 
 def resolve_scope(
@@ -61,9 +64,15 @@ def resolve_scope(
     region_name: str | None = None,
     compare_group: list[str] | None = None,
     years: list[int] | None = None,
+    overlay: schemas.DatasetOverlay | None = None,
 ) -> Scope:
-    """요청을 확정된 모집단으로 바꾼다. 네 엔드포인트가 전부 이것을 쓴다."""
-    national_df, regional_df = deps.get_frames()
+    """요청을 확정된 모집단으로 바꾼다. 네 엔드포인트가 전부 이것을 쓴다.
+
+    overlay 가 있으면 **병합된 프레임**으로 연도·대학·권역·비교군을 전부
+    판정한다. 그래야 기본 데이터에 없는 해(2027)를 더한 요청이 연도 검사를
+    통과하고, 그 해의 대학 목록이 비교군 후보가 된다.
+    """
+    national_df, regional_df = deps.get_frames(overlay)
 
     deps.require_year(year, national_df)
     deps.require_university(university, national_df, year=year)
@@ -83,6 +92,9 @@ def resolve_scope(
         compare_group=group,
         compare_note=note,
         years=resolved_years,
+        overlay_hash=(
+            overlay.digest() if overlay is not None and not overlay.is_empty() else None
+        ),
     )
 
 

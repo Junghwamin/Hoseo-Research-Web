@@ -12,20 +12,30 @@
 from __future__ import annotations
 
 import pandas as pd
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 import core.data_loader as dl
 from api import analysis, deps, schemas
 
 router = APIRouter(prefix="/api", tags=["stats"])
 
+# GET 과 POST 가 한 쌍이다. GET 은 지금까지의 계약 그대로이고, POST 는 같은 응답에
+# 브라우저 데이터셋(`overlay`)만 더 받는다. 본문은 `_dataset_info`·`_regions_of`·
+# `_universities_of` 하나씩이라 두 경로가 갈라질 자리가 없다.
 
-@router.get("/data", response_model=schemas.DatasetInfo)
-def get_dataset_info() -> schemas.DatasetInfo:
-    national_df, regional_df = deps.get_frames()
+
+def _overlay_years(overlay: schemas.DatasetOverlay | None) -> list[int]:
+    return overlay.years() if overlay is not None and not overlay.is_empty() else []
+
+
+def _dataset_info(
+    national_df: pd.DataFrame, regional_df: pd.DataFrame, overlay_years: list[int]
+) -> schemas.DatasetInfo:
     years = dl.get_available_years(national_df)
     latest = years[-1]
 
+    # overlay 가 있으면 병합된 프레임의 최신 연도로 센다 — 화면의 "133개교" 와
+    # 범위 문장이 사용자가 지금 보는 데이터를 말해야 한다.
     count = int((national_df["연도"] == latest).sum())
 
     return schemas.DatasetInfo(
@@ -39,21 +49,43 @@ def get_dataset_info() -> schemas.DatasetInfo:
         # V14. 사용자 결정은 "현행 유지 + 라벨 명시" 였다. 수치는 그대로 두되
         # 어떤 모집단인지를 API 가 반드시 알려준다.
         nationalRankScopeNote=(
-            f"전국순위는 대학알리미에 등재된 사립 {count}개교 기준이다. "
-            f"국공립대·과기원은 집계에 포함되지 않는다."
+            f"전국순위는 대학알리미에 등재된 사립 {count}개교 기준입니다. "
+            f"국공립대·과기원은 집계에 포함되지 않습니다."
         ),
+        overlayYears=overlay_years,
     )
+
+
+@router.get("/data", response_model=schemas.DatasetInfo)
+def get_dataset_info() -> schemas.DatasetInfo:
+    national_df, regional_df = deps.get_frames()
+    return _dataset_info(national_df, regional_df, [])
+
+
+@router.post("/data", response_model=schemas.DatasetInfo)
+def post_dataset_info(req: schemas.DatasetQuery) -> schemas.DatasetInfo:
+    """GET 과 같되 브라우저 데이터셋을 덧씌운 뒤의 모양을 돌려준다."""
+    national_df, regional_df = deps.get_frames(req.overlay)
+    return _dataset_info(national_df, regional_df, _overlay_years(req.overlay))
+
+
+def _regions_of(university: str, regional_df: pd.DataFrame) -> schemas.RegionsResponse:
+    regions = dl.detect_region(university, regional_df)
+    if not regions:
+        raise HTTPException(status_code=404, detail=f"데이터에 없는 대학입니다: {university}")
+    return schemas.RegionsResponse(university=university, regions=regions)
 
 
 @router.get("/regions", response_model=schemas.RegionsResponse)
 def get_regions(university: str) -> schemas.RegionsResponse:
     _, regional_df = deps.get_frames()
-    regions = dl.detect_region(university, regional_df)
-    if not regions:
-        from fastapi import HTTPException
+    return _regions_of(university, regional_df)
 
-        raise HTTPException(status_code=404, detail=f"없는 대학이다: {university}")
-    return schemas.RegionsResponse(university=university, regions=regions)
+
+@router.post("/regions", response_model=schemas.RegionsResponse)
+def post_regions(req: schemas.RegionsQuery) -> schemas.RegionsResponse:
+    _, regional_df = deps.get_frames(req.overlay)
+    return _regions_of(req.university, regional_df)
 
 
 @router.post("/stats", response_model=schemas.StatsResponse)
@@ -61,7 +93,7 @@ def post_stats(req: schemas.StatsRequest) -> schemas.StatsResponse:
     # 모집단 판정과 계산은 `api.analysis` 한 곳에서만 한다. 여기서 한 번 더
     # 하면 보고서·차트와 갈라질 자리가 생긴다 — 실제로 두 번 그랬다.
     scope = analysis.resolve_scope(
-        req.university, req.year, req.regionName, req.compareGroup, req.years
+        req.university, req.year, req.regionName, req.compareGroup, req.years, req.overlay
     )
     stats = analysis.collect_stats(scope)
 
@@ -73,6 +105,7 @@ def post_stats(req: schemas.StatsRequest) -> schemas.StatsResponse:
         compareGroupNote=scope.compare_note,
         years=scope.years,
         dataVersion=deps.data_version(),
+        overlayHash=scope.overlay_hash,
         trend={
             y: schemas.TrendPoint(**schemas.translate(v, schemas.TREND_KEYS))
             for y, v in stats["trend"].items()
@@ -112,23 +145,15 @@ def _to_yoy(raw: dict) -> schemas.YoYChanges:
     )
 
 
-@router.get("/universities", response_model=schemas.UniversitiesResponse)
-def get_region_universities(region: str, year: int) -> schemas.UniversitiesResponse:
-    """권역 안의 대학 전체와 그 해 지표.
-
-    비교군 후보를 고르는 화면과 권역 막대차트가 같은 데이터를 쓴다.
-    `/api/stats` 의 `compare` 는 **확정된 비교군만** 담으므로, 후보를 보여주려면
-    이게 따로 필요하다.
-    """
-    national_df, regional_df = deps.get_frames()
+def _universities_of(
+    region: str, year: int, national_df: pd.DataFrame, regional_df: pd.DataFrame
+) -> schemas.UniversitiesResponse:
     deps.require_year(year, national_df)
 
     regions = set(regional_df["권역명"].dropna().unique())
     if region not in regions:
-        from fastapi import HTTPException
-
         raise HTTPException(
-            status_code=404, detail=f"없는 권역이다: {region}. 가능: {sorted(regions)}"
+            status_code=404, detail=f"없는 권역입니다: {region}. 가능한 권역: {sorted(regions)}"
         )
 
     rows = regional_df[
@@ -155,3 +180,21 @@ def get_region_universities(region: str, year: int) -> schemas.UniversitiesRespo
             for _, r in rows.iterrows()
         ],
     )
+
+
+@router.get("/universities", response_model=schemas.UniversitiesResponse)
+def get_region_universities(region: str, year: int) -> schemas.UniversitiesResponse:
+    """권역 안의 대학 전체와 그 해 지표.
+
+    비교군 후보를 고르는 화면과 권역 막대차트가 같은 데이터를 쓴다.
+    `/api/stats` 의 `compare` 는 **확정된 비교군만** 담으므로, 후보를 보여주려면
+    이게 따로 필요하다.
+    """
+    national_df, regional_df = deps.get_frames()
+    return _universities_of(region, year, national_df, regional_df)
+
+
+@router.post("/universities", response_model=schemas.UniversitiesResponse)
+def post_region_universities(req: schemas.UniversitiesQuery) -> schemas.UniversitiesResponse:
+    national_df, regional_df = deps.get_frames(req.overlay)
+    return _universities_of(req.region, req.year, national_df, regional_df)

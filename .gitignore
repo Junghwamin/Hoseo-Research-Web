@@ -52,3 +52,4 @@ desktop.ini
 node_modules/
 web/dist/
 web/.vite/
+.vercel

@@ -48,3 +48,26 @@ async def post_preprocess(
         uploads.append((name, await upload.read()))
 
     return schemas.PreprocessResponse(**svc.ingest(uploads))
+
+
+@router.post("/dataset/preview", response_model=schemas.DatasetPreviewResponse)
+async def post_dataset_preview(
+    file: UploadFile = File(
+        ...,
+        description=(
+            "대학알리미 Raw xlsx **한 개**. 파일명에 '2026년' 또는 '2026_' 처럼 "
+            "연도가 들어 있어야 하고, 4MB 를 넘을 수 없다(서버리스 본문 상한)."
+        ),
+    ),
+) -> schemas.DatasetPreviewResponse:
+    """공시 xlsx 한 해를 메모리에서 계산해 돌려준다. **서버에는 아무것도 남지 않는다.**
+
+    읽기 전용 배포(Vercel)를 위한 경로다. 브라우저가 이 결과를 저장해 두고 이후
+    요청에 `overlay` 로 실어 보내면, 서버는 요청마다 기본 데이터에 덧씌워 계산한다.
+    한 해 안의 순위는 그 해 파일만으로 완결되므로 파일 하나로 충분하다.
+
+    파일은 한 번에 하나다 — Vercel 함수의 요청 본문 상한(4.5MB)이 공시 xlsx
+    한두 개 크기라, 여러 개를 받으면 상한을 넘겨 설명 없는 413 이 된다.
+    """
+    name = svc.safe_name(file.filename)
+    return schemas.DatasetPreviewResponse(**svc.preview(name, await file.read()))

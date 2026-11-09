@@ -24,7 +24,16 @@ export interface paths {
          */
         get: operations["get_chart_api_chart__kind__png_get"];
         put?: never;
-        post?: never;
+        /**
+         * Post Chart
+         * @description GET 과 같은 PNG 를, 브라우저 데이터셋(`overlay`)을 덧씌워 그린다.
+         *
+         *     overlay 는 수백 KB 라 주소에 실을 수 없어 본문으로 받는다. 그래서 브라우저
+         *     캐시도 쓸 수 없다 — `no-store` 로 못박고, 화면 쪽이 objectURL 을 자기
+         *     캐시 키(매개변수 + `overlayHash`)로 들고 있다가 overlay 가 바뀌면 버린다.
+         *     overlay 가 없는 화면은 GET 을 쓴다.
+         */
+        post: operations["post_chart_api_chart__kind__png_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -41,7 +50,38 @@ export interface paths {
         /** Get Dataset Info */
         get: operations["get_dataset_info_api_data_get"];
         put?: never;
-        post?: never;
+        /**
+         * Post Dataset Info
+         * @description GET 과 같되 브라우저 데이터셋을 덧씌운 뒤의 모양을 돌려준다.
+         */
+        post: operations["post_dataset_info_api_data_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dataset/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Dataset Preview
+         * @description 공시 xlsx 한 해를 메모리에서 계산해 돌려준다. **서버에는 아무것도 남지 않는다.**
+         *
+         *     읽기 전용 배포(Vercel)를 위한 경로다. 브라우저가 이 결과를 저장해 두고 이후
+         *     요청에 `overlay` 로 실어 보내면, 서버는 요청마다 기본 데이터에 덧씌워 계산한다.
+         *     한 해 안의 순위는 그 해 파일만으로 완결되므로 파일 하나로 충분하다.
+         *
+         *     파일은 한 번에 하나다 — Vercel 함수의 요청 본문 상한(4.5MB)이 공시 xlsx
+         *     한두 개 크기라, 여러 개를 받으면 상한을 넘겨 설명 없는 413 이 된다.
+         */
+        post: operations["post_dataset_preview_api_dataset_preview_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -122,7 +162,8 @@ export interface paths {
         /** Get Regions */
         get: operations["get_regions_api_regions_get"];
         put?: never;
-        post?: never;
+        /** Post Regions */
+        post: operations["post_regions_api_regions_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -214,7 +255,8 @@ export interface paths {
          */
         get: operations["get_region_universities_api_universities_get"];
         put?: never;
-        post?: never;
+        /** Post Region Universities */
+        post: operations["post_region_universities_api_universities_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -242,6 +284,14 @@ export interface components {
             /** Regional */
             regional: number | null;
         };
+        /** Body_post_dataset_preview_api_dataset_preview_post */
+        Body_post_dataset_preview_api_dataset_preview_post: {
+            /**
+             * File
+             * @description 대학알리미 Raw xlsx **한 개**. 파일명에 '2026년' 또는 '2026_' 처럼 연도가 들어 있어야 하고, 4MB 를 넘을 수 없다(서버리스 본문 상한).
+             */
+            file: string;
+        };
         /** Body_post_preprocess_api_preprocess_post */
         Body_post_preprocess_api_preprocess_post: {
             /**
@@ -249,6 +299,30 @@ export interface components {
              * @description 대학알리미 Raw xlsx. 파일명에 '2026년' 또는 '2026_' 처럼 연도가 들어 있어야 한다.
              */
             files: string[];
+        };
+        /**
+         * ChartRequest
+         * @description `POST /api/chart/{kind}.png` 본문. GET 의 쿼리와 같은 뜻이고 overlay 만 더 받는다.
+         *
+         *     PNG 주소에 overlay 를 실을 수 없어서(수백 KB 를 쿼리에 넣을 수 없다) 본문으로
+         *     받는다. overlay 가 없으면 GET 을 쓰는 것이 맞다 — 브라우저 캐시가 된다.
+         */
+        ChartRequest: {
+            /** Comparegroup */
+            compareGroup?: string[] | null;
+            /** @description 브라우저에만 저장된 추가 데이터. 서버는 이 요청 안에서만 기본 데이터에 덧씌워 계산하고 저장하지 않는다. 같은 연도가 기본 데이터에 있으면 덮어쓴다. */
+            overlay?: components["schemas"]["DatasetOverlay"] | null;
+            /** Regionname */
+            regionName?: string | null;
+            /** University */
+            university: string;
+            /** Year */
+            year: number;
+            /**
+             * Years
+             * @description 추이·평균·순위에 남길 연도. 생략하면 전 연도. **기준 연도(year)가 반드시 포함되어야 한다.**
+             */
+            years?: number[] | null;
         };
         /**
          * CompareRow
@@ -275,6 +349,11 @@ export interface components {
         DatasetInfo: {
             /** Nationalrankscopenote */
             nationalRankScopeNote: string;
+            /**
+             * Overlayyears
+             * @default []
+             */
+            overlayYears: number[];
             /** Regions */
             regions: string[];
             /** Universities */
@@ -283,6 +362,43 @@ export interface components {
             universityCount: number;
             /** Years */
             years: number[];
+        };
+        /**
+         * DatasetOverlay
+         * @description 브라우저가 들고 있는 추가 데이터. 서버는 저장하지 않는다.
+         */
+        DatasetOverlay: {
+            /** National */
+            national: components["schemas"]["OverlayRow"][];
+            /** Regional */
+            regional: components["schemas"]["OverlayRegionalRow"][];
+        };
+        /**
+         * DatasetPreviewResponse
+         * @description 공시 xlsx 한 해를 메모리에서 계산한 결과. 브라우저가 이것을 그대로 저장한다.
+         *
+         *     미등재로 제외된 대학 수는 담지 않는다 — `core.preprocess.process_in_memory`
+         *     가 돌려주지 않고, `core/` 는 바꾸지 않는다.
+         */
+        DatasetPreviewResponse: {
+            /** National */
+            national: components["schemas"]["OverlayRow"][];
+            /** Regional */
+            regional: components["schemas"]["OverlayRegionalRow"][];
+            /** Sourcefile */
+            sourceFile: string;
+            /** Universities */
+            universities: number;
+            /** Year */
+            year: number;
+        };
+        /**
+         * DatasetQuery
+         * @description `POST /api/data` 본문. overlay 가 없으면 GET 과 같다.
+         */
+        DatasetQuery: {
+            /** @description 브라우저에만 저장된 추가 데이터. 서버는 이 요청 안에서만 기본 데이터에 덧씌워 계산하고 저장하지 않는다. 같은 연도가 기본 데이터에 있으면 덮어쓴다. */
+            overlay?: components["schemas"]["DatasetOverlay"] | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -295,6 +411,8 @@ export interface components {
             compareGroup?: string[] | null;
             /** Keys */
             keys?: string[] | null;
+            /** @description 브라우저에만 저장된 추가 데이터. 서버는 이 요청 안에서만 기본 데이터에 덧씌워 계산하고 저장하지 않는다. 같은 연도가 기본 데이터에 있으면 덮어쓴다. */
+            overlay?: components["schemas"]["DatasetOverlay"] | null;
             /** Regionname */
             regionName?: string | null;
             /** University */
@@ -324,6 +442,50 @@ export interface components {
             narratives: {
                 [key: string]: string;
             };
+        };
+        /**
+         * OverlayRegionalRow
+         * @description 권역 표의 한 행. 다중 캠퍼스 대학은 권역마다 한 행이다.
+         */
+        OverlayRegionalRow: {
+            /** Faculty */
+            faculty: number;
+            /** Name */
+            name: string;
+            /** Nationalrank */
+            nationalRank: number | null;
+            /** Papers */
+            papers: number;
+            /** Percapita */
+            perCapita: number;
+            /** Regionname */
+            regionName: string;
+            /** Regionalrank */
+            regionalRank: number | null;
+            /** Year */
+            year: number;
+        };
+        /**
+         * OverlayRow
+         * @description 전국 표의 한 행. 코어 CSV `전체_대학_데이터.csv` 의 한 줄과 1:1 이다.
+         *
+         *     요청(DatasetOverlay)과 응답(DatasetPreviewResponse) 양쪽에 쓰인다. 필드에
+         *     기본값을 두지 않는 이유 — 기본값이 있으면 FastAPI 가 입력용·출력용 스키마를
+         *     따로 만들어(`OverlayRow-Input`/`-Output`) 생성 타입 이름이 갈라진다.
+         */
+        OverlayRow: {
+            /** Faculty */
+            faculty: number;
+            /** Name */
+            name: string;
+            /** Nationalrank */
+            nationalRank: number | null;
+            /** Papers */
+            papers: number;
+            /** Percapita */
+            perCapita: number;
+            /** Year */
+            year: number;
         };
         /**
          * PreprocessResponse
@@ -367,6 +529,13 @@ export interface components {
             /** Regionalrankdelta */
             regionalRankDelta: number | null;
         };
+        /** RegionsQuery */
+        RegionsQuery: {
+            /** @description 브라우저에만 저장된 추가 데이터. 서버는 이 요청 안에서만 기본 데이터에 덧씌워 계산하고 저장하지 않는다. 같은 연도가 기본 데이터에 있으면 덮어쓴다. */
+            overlay?: components["schemas"]["DatasetOverlay"] | null;
+            /** University */
+            university: string;
+        };
         /**
          * RegionsResponse
          * @description 대학이 속한 권역들. 다중 캠퍼스는 2개 이상이 나온다.
@@ -385,6 +554,8 @@ export interface components {
             narratives?: {
                 [key: string]: string;
             };
+            /** @description 브라우저에만 저장된 추가 데이터. 서버는 이 요청 안에서만 기본 데이터에 덧씌워 계산하고 저장하지 않는다. 같은 연도가 기본 데이터에 있으면 덮어쓴다. */
+            overlay?: components["schemas"]["DatasetOverlay"] | null;
             /** Regionname */
             regionName?: string | null;
             /** University */
@@ -418,6 +589,8 @@ export interface components {
         StatsRequest: {
             /** Comparegroup */
             compareGroup?: string[] | null;
+            /** @description 브라우저에만 저장된 추가 데이터. 서버는 이 요청 안에서만 기본 데이터에 덧씌워 계산하고 저장하지 않는다. 같은 연도가 기본 데이터에 있으면 덮어쓴다. */
+            overlay?: components["schemas"]["DatasetOverlay"] | null;
             /** Regionname */
             regionName?: string | null;
             /** University */
@@ -444,6 +617,8 @@ export interface components {
             compareGroupNote: string | null;
             /** Dataversion */
             dataVersion: number;
+            /** Overlayhash */
+            overlayHash: string | null;
             /** Rankchanges */
             rankChanges: {
                 [key: string]: components["schemas"]["RankChange"];
@@ -477,6 +652,15 @@ export interface components {
             perCapita: number;
             /** Regionalrank */
             regionalRank: number | null;
+        };
+        /** UniversitiesQuery */
+        UniversitiesQuery: {
+            /** @description 브라우저에만 저장된 추가 데이터. 서버는 이 요청 안에서만 기본 데이터에 덧씌워 계산하고 저장하지 않는다. 같은 연도가 기본 데이터에 있으면 덮어쓴다. */
+            overlay?: components["schemas"]["DatasetOverlay"] | null;
+            /** Region */
+            region: string;
+            /** Year */
+            year: number;
         };
         /**
          * UniversitiesResponse
@@ -593,6 +777,41 @@ export interface operations {
             };
         };
     };
+    post_chart_api_chart__kind__png_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_dataset_info_api_data_get: {
         parameters: {
             query?: never;
@@ -609,6 +828,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DatasetInfo"];
+                };
+            };
+        };
+    };
+    post_dataset_info_api_data_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatasetQuery"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasetInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_dataset_preview_api_dataset_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_post_dataset_preview_api_dataset_preview_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasetPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -711,6 +996,39 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_regions_api_regions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegionsQuery"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -862,6 +1180,39 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UniversitiesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_region_universities_api_universities_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UniversitiesQuery"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

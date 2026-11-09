@@ -12,15 +12,27 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 
+from api import schemas
 from api.routers import data, report, settings, stats
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 WEB_DIST = PROJECT_ROOT / "web" / "dist"
+
+#: 정적 파일 캐시. Vercel 이 함수 응답에 붙이는 기본값은 `max-age=0` 이라 매 방문이
+#: 재검증이다. `/assets/*` 는 이름에 내용 해시가 있어 영구 캐시가 안전하고, 글꼴은
+#: 파일명이 바뀌지 않은 채 다시 만들어질 수 있어 하루만 둔다. index.html 은 그대로
+#: 둔다 — 새 배포의 자산 이름을 가리켜야 한다. (vercel.json 의 headers 는 CDN 으로
+#: 올라간 파일에만 닿으므로, 함수가 서빙하는 경우와 오프라인 설치본까지 여기서 맞춘다.)
+STATIC_CACHE_CONTROL: dict[str, str] = {
+    "/assets/": "public, max-age=31536000, immutable",
+    "/fonts/": "public, max-age=86400",
+}
 
 # `.env` 를 환경변수로 올린다.
 #
@@ -44,29 +56,58 @@ app.include_router(settings.router)
 app.include_router(data.router)
 
 
+@app.exception_handler(RequestValidationError)
+async def _overlay_validation_detail(request: Request, exc: RequestValidationError):  # type: ignore[no-untyped-def]
+    """브라우저 데이터셋(`overlay`)의 검증 실패는 **한 문장**으로 답한다.
+
+    FastAPI 의 기본 422 는 pydantic 오류 목록(영문 `msg`, 행 번호 `loc`)이다.
+    화면은 `detail` 을 그대로 띄우므로 "body.overlay.national.1234.faculty: Input
+    should be…" 가 사용자에게 보인다. overlay 는 브라우저 저장소에서 온 것이라
+    사용자가 고칠 수 있는 것은 지우고 다시 올리는 것뿐이다 — 그 말만 한다.
+    다른 요청의 422 는 기본 모양 그대로다(기존 계약).
+    """
+    if any("overlay" in (err.get("loc") or ()) for err in exc.errors()):
+        return JSONResponse(
+            status_code=422, content={"detail": schemas.OVERLAY_INVALID_DETAIL}
+        )
+    return await request_validation_exception_handler(request, exc)
+
+
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-def mount_web() -> None:
-    """React 빌드 산출물을 서빙한다. 없으면 조용히 건너뛴다(개발 중에는 Vite 가 뜬다)."""
-    if not WEB_DIST.is_dir():
+def mount_web(target: FastAPI = app, dist: Path = WEB_DIST) -> None:
+    """React 빌드 산출물을 서빙한다. 없으면 조용히 건너뛴다(개발 중에는 Vite 가 뜬다).
+
+    **캐치올 라우트를 직접 만들지 않는다.** 예전에는 `dist / 요청경로` 를 그대로
+    열었는데, `/..%2f..%2f.env` 로 폴더 밖 파일이 나갔다. 공개 배포에서는
+    `/proc/self/environ` 으로 API 키까지 읽힌다. `frontend` 는 경로 검사를
+    Starlette 에 맡긴다.
+
+    이 경로는 OpenAPI 에도 잡히지 않는다. **web/dist 존재 여부에 따라 스키마가
+    달라지면 안 된다** — 생성 타입이 빌드 여부에 갈리면 드리프트 가드가 환경 탓으로
+    실패한다(실제로 CI 에서 그렇게 터졌다).
+
+    Vercel 은 이 폴더를 CDN 으로 올린다. 그래서 첫 화면이 함수의 콜드 스타트를
+    기다리지 않는다.
+    """
+    if not dist.is_dir():
         return
 
-    app.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")
+    target.frontend("/", directory=dist)
 
-    # OpenAPI 스키마에서 제외한다. 이건 API 엔드포인트가 아니라 정적 파일
-    # 서빙이고, 무엇보다 **web/dist 존재 여부에 따라 스키마가 달라지면 안 된다.**
-    # 프론트를 빌드했는지에 따라 생성 타입이 갈리면 드리프트 가드가 환경 탓으로
-    # 실패한다(실제로 CI 에서 그렇게 터졌다).
-    @app.get("/{full_path:path}", include_in_schema=False)
-    def spa(full_path: str) -> FileResponse:
-        # 클라이언트 라우팅: 알 수 없는 경로는 index.html 로 넘겨 React 가 처리한다
-        candidate = WEB_DIST / full_path
-        if full_path and candidate.is_file():
-            return FileResponse(candidate)
-        return FileResponse(WEB_DIST / "index.html")
+    @target.middleware("http")
+    async def static_cache_control(request: Request, call_next):  # type: ignore[no-untyped-def]
+        response = await call_next(request)
+        if response.status_code == 200:
+            path = request.url.path
+            for prefix, value in STATIC_CACHE_CONTROL.items():
+                if path.startswith(prefix):
+                    response.headers["cache-control"] = value
+                    break
+        return response
 
 
 mount_web()

@@ -21,6 +21,7 @@ Raw 전체를 다시 돌리는 것뿐이다. `monkeypatch.chdir` 이 유일한 �
 
 from __future__ import annotations
 
+import os
 import shutil
 import unicodedata
 from pathlib import Path
@@ -81,6 +82,43 @@ def _upload(client: TestClient, name: str, data: bytes):
         "/api/preprocess",
         files=[("files", (name, data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))],
     )
+
+
+# ---------------------------------------------------------------------------
+# 읽기 전용 배포
+# ---------------------------------------------------------------------------
+
+
+class TestReadOnlyDeploy:
+    def test_쓸_수_없는_서버는_시도하지_않고_이유를_말한다(self, client, tmp_path, monkeypatch):
+        """Vercel 은 `/tmp` 밖이 읽기 전용이다.
+
+        화면은 `canPersist` 로 「데이터 추가」 모드로 바뀌지만 엔드포인트는 남는다.
+        막지 않으면 `write_bytes` 의 `OSError` 가 설명 없는 500 으로 나간다.
+        """
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(os, "access", lambda *args, **kwargs: False)
+
+        r = _upload(client, "2026년_테스트.xlsx", b"not-a-workbook")
+
+        assert r.status_code == 409
+        assert "읽기 전용" in r.json()["detail"]
+        assert not (tmp_path / "Raw data").exists(), "거절하면서 폴더를 만들었다"
+
+    def test_FORCE_READONLY_면_409(self, client, tmp_path, monkeypatch):
+        """쓸 수 있는 디스크여도 스위치가 켜져 있으면 공개 사이트처럼 거절한다.
+
+        e2e 가 이 스위치로 공개 사이트 모드를 로컬에서 재현한다. 디스크 권한만
+        보면 개발 PC 에서는 언제나 쓸 수 있어 그 모드를 만들 수 없다.
+        """
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("HOSEO_FORCE_READONLY", "1")
+
+        r = _upload(client, "2026년_테스트.xlsx", b"not-a-workbook")
+
+        assert r.status_code == 409
+        assert "읽기 전용" in r.json()["detail"]
+        assert not (tmp_path / "Raw data").exists(), "거절하면서 폴더를 만들었다"
 
 
 # ---------------------------------------------------------------------------

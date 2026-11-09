@@ -18,6 +18,7 @@ import pandas as pd
 from fastapi import HTTPException
 
 import core.data_loader as dl
+from api import schemas
 from core.config import COMPARE_GROUP, UNIVERSITY
 
 #: 비교군이 대상 대학 하나만 남지 않도록 채울 최소 인원(R-RS-02).
@@ -41,12 +42,108 @@ def _load() -> tuple[pd.DataFrame, pd.DataFrame]:
     except FileNotFoundError as e:
         raise HTTPException(
             status_code=503,
-            detail=f"데이터 파일이 없다. 전처리를 먼저 실행해야 한다: {e}",
+            detail=f"데이터 파일이 없습니다. 전처리를 먼저 실행하세요. ({e})",
         ) from e
 
 
-def get_frames() -> tuple[pd.DataFrame, pd.DataFrame]:
-    return _load()
+def get_frames(
+    overlay: schemas.DatasetOverlay | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """계산에 쓸 (전국, 권역) 프레임.
+
+    overlay 가 없으면 캐시된 기본 프레임 그대로다. 있으면 **요청마다** 기본에
+    덧씌운 새 프레임을 만든다 — 병합 결과는 캐시하지 않는다. 캐시하면 무효화
+    경로가 또 하나 생기고, 그 경로를 빠뜨린 것이 전처리 캐시 사고였다.
+    """
+    base = _load()
+    if overlay is None or overlay.is_empty():
+        return base
+    return merge_overlay(*base, overlay)
+
+
+# ---------------------------------------------------------------------------
+# 브라우저 데이터셋(overlay) 병합
+# ---------------------------------------------------------------------------
+
+#: 코어 CSV 의 열 dtype. overlay 프레임을 **붙이기 전에** 이 모양으로 맞춘다.
+#: 붙인 뒤에 맞추면 `concat` 이 열 전체를 object/Int64 로 올려, overlay 가 없을
+#: 때와 있을 때 코어가 보는 dtype 이 달라진다.
+_OVERLAY_DTYPES = {
+    "연도": "int64",
+    "전임교원수": "int64",
+    "SCI/SCOPUS논문수": "float64",
+    "1인당논문수": "float64",
+}
+_RANK_COLUMNS = ("전국순위", "권역순위")
+
+
+def _overlay_frame(rows: list[dict], columns: dict[str, str]) -> pd.DataFrame:
+    """영문 키 행 → 코어 열 이름·dtype 의 프레임. 빈 목록이어도 열은 있다."""
+    frame = pd.DataFrame(rows, columns=list(columns)).rename(columns=columns)
+    for col, dtype in _OVERLAY_DTYPES.items():
+        frame[col] = frame[col].astype(dtype)
+    for col in ("학교명", "권역명"):
+        if col in frame.columns:
+            frame[col] = frame[col].astype(str)
+    for col in _RANK_COLUMNS:
+        if col not in frame.columns:
+            continue
+        # 기본 CSV 의 순위는 int64 이고 빈 값이 없다(코어가 `int(row[...])` 로
+        # 읽는다). 순위가 전부 있으면 같은 int64 로, None 이 섞여 있을 때만
+        # nullable Int64 로 둔다 — 그 행을 코어가 읽으면 TypeError 가 나지만,
+        # 미리보기가 만든 overlay 에는 빈 순위가 없다.
+        ranks = frame[col].astype("Int64")
+        frame[col] = ranks if ranks.isna().any() else ranks.astype("int64")
+    return frame
+
+
+def overlay_frames(
+    overlay: schemas.DatasetOverlay,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """overlay 를 코어가 읽는 두 프레임으로 바꾼다. 영문 → 한글 열은 `schemas` 의 표."""
+    national = _overlay_frame(
+        [r.model_dump() for r in overlay.national], schemas.OVERLAY_NATIONAL_COLUMNS
+    )
+    regional = _overlay_frame(
+        [r.model_dump() for r in overlay.regional], schemas.OVERLAY_REGIONAL_COLUMNS
+    )
+    return national, regional
+
+
+def merge_overlay(
+    base_national: pd.DataFrame,
+    base_regional: pd.DataFrame,
+    overlay: schemas.DatasetOverlay,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """기본 프레임에서 overlay 의 연도를 빼고 overlay 행을 붙인다.
+
+    같은 해가 기본에 있으면 **통째로** 덮어쓴다(정정 파일). 한 해 안의 순위는
+    그 해 파일만으로 완결되므로 행 단위로 섞으면 순위가 틀린다.
+
+    권역 이름은 기본 데이터의 권역 집합 안이어야 한다. 오타(`화성권`)를 그대로
+    받으면 0개교짜리 권역이 조용히 생겨 권역 평균이 틀린다(Review Focus 5).
+    pydantic 은 기본 데이터를 모르므로 여기서 본다.
+    """
+    ov_national, ov_regional = overlay_frames(overlay)
+
+    known_regions = set(base_regional["권역명"].dropna().unique())
+    if set(ov_regional["권역명"].unique()) - known_regions:
+        raise HTTPException(status_code=422, detail=schemas.OVERLAY_INVALID_DETAIL)
+
+    years = set(overlay.years())
+    national = pd.concat(
+        [base_national[~base_national["연도"].isin(years)], ov_national],
+        ignore_index=True,
+    )
+    regional = pd.concat(
+        [base_regional[~base_regional["연도"].isin(years)], ov_regional],
+        ignore_index=True,
+    )
+    national = national.sort_values(["연도", "전국순위", "학교명"]).reset_index(drop=True)
+    regional = regional.sort_values(["연도", "권역명", "권역순위", "학교명"]).reset_index(
+        drop=True
+    )
+    return national, regional
 
 
 #: 데이터가 교체된 횟수. 프레임을 새로 읽을 때마다 오른다.
@@ -112,7 +209,7 @@ def resolve_years(
     if unknown:
         raise HTTPException(
             status_code=422,
-            detail=f"데이터에 없는 연도다: {unknown}. 가능: {available}",
+            detail=f"데이터에 없는 연도입니다: {unknown}. 가능한 연도: {available}",
         )
 
     years = sorted(set(requested))
@@ -120,7 +217,7 @@ def resolve_years(
         raise HTTPException(
             status_code=422,
             detail=(
-                f"기준 연도 {year} 는 분석 연도 안에 있어야 한다. "
+                f"기준 연도 {year}년은 분석 연도에 포함되어야 합니다. "
                 f"고른 연도: {years}"
             ),
         )
@@ -139,13 +236,13 @@ def resolve_region(university: str, regional_df: pd.DataFrame, requested: str | 
     detected = dl.detect_region(university, regional_df)
     if not detected:
         raise HTTPException(
-            status_code=404, detail=f"권역 데이터에 없는 대학이다: {university}"
+            status_code=404, detail=f"권역 데이터에 없는 대학입니다: {university}"
         )
     if requested is not None:
         if requested not in detected:
             raise HTTPException(
                 status_code=400,
-                detail=f"{university} 는 {requested} 에 속하지 않는다. 가능: {detected}",
+                detail=f"{university}는 {requested}에 속하지 않습니다. 가능한 권역: {detected}",
             )
         return requested
     return detected[0]
@@ -192,7 +289,7 @@ def resolve_compare_group(
         if missing:
             group = [u for u in group if u in in_region]
             note = (
-                f"{year}년 {region_name}에 없는 대학을 비교군에서 뺐다: "
+                f"{year}년 {region_name}에 없는 대학을 비교군에서 뺐습니다: "
                 f"{', '.join(missing)}"
             )
 
@@ -200,15 +297,15 @@ def resolve_compare_group(
             # 막대가 스무 개를 넘으면 차트가 읽히지 않는다. 자르되 **말하고**
             # 자른다 — 조용히 자르면 고른 대학이 왜 없는지 알 수 없다.
             note = (
-                f"비교군은 최대 {MAX_REQUESTED_COMPARE}개교까지다. "
-                f"고른 {len(group)}개교 중 앞 {MAX_REQUESTED_COMPARE}개교만 쓴다."
+                f"비교군은 최대 {MAX_REQUESTED_COMPARE}개교까지입니다. "
+                f"고른 {len(group)}개교 중 앞 {MAX_REQUESTED_COMPARE}개교만 씁니다."
             )
             group = group[:MAX_REQUESTED_COMPARE]
 
         if not group and note is None:
             note = (
-                f"{university} 자신만 비교군에 있다. "
-                f"비교군 평균은 {university} 자신의 값이다."
+                f"비교군에 {university} 외의 대학이 없습니다. "
+                f"비교군 평균은 {university}의 값과 같습니다."
             )
         return [university, *group], note
 
@@ -224,7 +321,7 @@ def resolve_compare_group(
         peers = len(_region_universities(regional_df, region_name, year))
         note = (
             f"{year}년 {region_name}에 집계된 대학이 {peers}개교뿐이라 "
-            f"비교군을 구성할 수 없다. 비교군 평균은 {university} 자신의 값이다."
+            f"비교군을 구성할 수 없습니다. 비교군 평균은 {university}의 값과 같습니다."
         )
 
     return [university, *group[:COMPARE_FALLBACK_SIZE]], note
@@ -259,7 +356,7 @@ def require_university(
     집합으로만 검사하면 없는 해를 조회해도 통과해 빈 통계가 나간다.
     """
     if university not in set(national_df["학교명"]):
-        raise HTTPException(status_code=404, detail=f"없는 대학이다: {university}")
+        raise HTTPException(status_code=404, detail=f"데이터에 없는 대학입니다: {university}")
 
     if year is not None:
         in_year = set(national_df[national_df["연도"] == year]["학교명"])
@@ -269,7 +366,7 @@ def require_university(
             )
             raise HTTPException(
                 status_code=404,
-                detail=f"{university} 는 {year} 년 데이터에 없다. 있는 연도: {years}",
+                detail=f"{university}는 {year}년 데이터에 없습니다. 있는 연도: {years}",
             )
 
 
@@ -277,7 +374,7 @@ def require_year(year: int, national_df: pd.DataFrame) -> None:
     if year not in set(dl.get_available_years(national_df)):
         raise HTTPException(
             status_code=404,
-            detail=f"{year} 년 데이터가 없다. 가능: {dl.get_available_years(national_df)}",
+            detail=f"{year}년 데이터가 없습니다. 가능한 연도: {dl.get_available_years(national_df)}",
         )
 
 
@@ -287,7 +384,9 @@ __all__ = [
     "UNIVERSITY",
     "data_version",
     "get_frames",
+    "merge_overlay",
     "on_reset",
+    "overlay_frames",
     "require_university",
     "require_year",
     "reset_cache",

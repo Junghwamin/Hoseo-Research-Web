@@ -19,6 +19,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
+from api import preprocess_service as svc
 from api import schemas
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
@@ -59,7 +60,13 @@ def _read_dotenv_key() -> str | None:
 
 
 def _can_persist() -> bool:
-    """`.env` 에 쓸 수 있는가. 읽기 전용 배포에서는 저장 UI 를 숨겨야 한다."""
+    """`.env` 에 쓸 수 있는가. 화면은 이 값 하나로 persist/browser 모드를 고른다.
+
+    `HOSEO_FORCE_READONLY` 가 켜져 있으면 디스크 권한과 무관하게 False 다 —
+    공개 사이트 모드를 개발 PC 에서 재현하기 위한 스위치다.
+    """
+    if svc.forced_readonly():
+        return False
     try:
         if ENV_PATH.exists():
             return os.access(ENV_PATH, os.W_OK)
@@ -70,6 +77,14 @@ def _can_persist() -> bool:
 
 @router.get("", response_model=schemas.SettingsResponse)
 def get_settings() -> schemas.SettingsResponse:
+    # 읽기 전용 강제 모드에서는 **서버 키가 있어도 없는 것으로 친다.** 개발 PC 의
+    # `.env` 에 진짜 키가 있어도 공개 사이트처럼 브라우저 키 폼이 떠야 하고,
+    # `/api/narrative` 도 같은 규칙으로 헤더만 본다(report._require_api_key).
+    if svc.forced_readonly():
+        return schemas.SettingsResponse(
+            apiKeyConfigured=False, apiKeySource=None, apiKeyHint=None, canPersist=False
+        )
+
     env_key = os.environ.get("OPENAI_API_KEY", "").strip()
     dotenv_key = _read_dotenv_key()
 
@@ -96,18 +111,24 @@ def set_api_key(req: schemas.ApiKeyRequest) -> schemas.SettingsResponse:
     key = req.apiKey.strip()
 
     if not key.startswith("sk-"):
-        raise HTTPException(status_code=422, detail="OpenAI 키는 'sk-' 로 시작한다.")
+        raise HTTPException(status_code=422, detail="OpenAI 키는 'sk-' 로 시작해야 합니다.")
     if _is_placeholder(key):
-        raise HTTPException(status_code=422, detail="자리표시자를 그대로 넣었다.")
+        raise HTTPException(
+            status_code=422, detail="자리표시자가 그대로 들어 있습니다. 실제 키를 넣으세요."
+        )
     if len(key) < MIN_KEY_LENGTH:
         raise HTTPException(
             status_code=422,
-            detail=f"키가 너무 짧다({len(key)}자). 붙여넣다 잘리지 않았는지 확인할 것.",
+            detail=f"키가 너무 짧습니다({len(key)}자). 붙여넣다 잘리지 않았는지 확인하세요.",
         )
     if not _can_persist():
+        # 서버 경로는 응답에 싣지 않는다 — 공개 배포에서 익명 요청이 닿는 자리다.
         raise HTTPException(
             status_code=409,
-            detail=f"{ENV_PATH} 에 쓸 수 없다. 환경변수 OPENAI_API_KEY 로 설정할 것.",
+            detail=(
+                "이 서버는 설정 파일(.env)에 쓸 수 없습니다. "
+                "설정에서 브라우저 키를 쓰거나 서버 환경변수 OPENAI_API_KEY 로 설정하세요."
+            ),
         )
 
     from dotenv import set_key
@@ -115,7 +136,9 @@ def set_api_key(req: schemas.ApiKeyRequest) -> schemas.SettingsResponse:
     try:
         set_key(str(ENV_PATH), "OPENAI_API_KEY", key)
     except OSError as e:
-        raise HTTPException(status_code=500, detail=f".env 기록 실패: {e}") from e
+        raise HTTPException(
+            status_code=500, detail=f".env 파일에 기록하지 못했습니다. ({e})"
+        ) from e
 
     # 이번 프로세스에도 즉시 반영한다. 안 하면 사용자가 저장한 뒤에도
     # 서버를 껐다 켜야 GPT 를 쓸 수 있다.

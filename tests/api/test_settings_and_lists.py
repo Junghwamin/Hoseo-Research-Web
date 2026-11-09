@@ -122,6 +122,25 @@ class TestSettings:
         r = client.post("/api/settings/api-key", json={"apiKey": key})
         assert r.status_code == 422, f"{reason} 인데 통과했다"
 
+    def test_FORCE_READONLY_면_canPersist_가_false(self, client, monkeypatch):
+        """공개 사이트 모드를 개발 PC 에서 재현하는 스위치다.
+
+        화면은 `canPersist` 하나로 persist/browser 모드를 고른다. 이 값이
+        흔들리면 e2e 가 공개 사이트 모드를 로컬에서 재현할 길이 없다.
+        """
+        monkeypatch.setenv("HOSEO_FORCE_READONLY", "1")
+        assert client.get("/api/settings").json()["canPersist"] is False
+
+    def test_FORCE_READONLY_면_서버_키도_없는_것으로_친다(self, client, monkeypatch):
+        # 개발 PC 의 `.env` 에 진짜 키가 있어도 공개 사이트처럼 보여야 한다.
+        # 서버 키가 보이면 4단계가 "키 있음" 으로 분기해 브라우저 키 폼이 안 뜬다.
+        monkeypatch.setenv("HOSEO_FORCE_READONLY", "1")
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-" + "real" + "0" * 24)
+        data = client.get("/api/settings").json()
+        assert data["apiKeyConfigured"] is False
+        assert data["apiKeySource"] is None
+        assert data["apiKeyHint"] is None
+
 
 # ---------------------------------------------------------------------------
 # /api/data — 대학 목록

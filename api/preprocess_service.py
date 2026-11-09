@@ -29,6 +29,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import tempfile
 import unicodedata
@@ -37,11 +38,19 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
+import pandas as pd
+
 import core.preprocess as pp
-from api import deps
+from api import deps, schemas
 
 #: 파일 하나의 상한. 대학알리미 공시 xlsx 는 보통 1~3MB 다.
 MAX_FILE_BYTES = 30 * 1024 * 1024
+
+#: 미리보기(`/api/dataset/preview`) 한 파일의 상한. Vercel 함수의 요청 본문
+#: 상한이 4.5MB 라 그 아래에서 **우리가 먼저 알아듣는 말로** 거절한다 — 넘기면
+#: 앞단이 본문 없는 413 을 돌려줘 화면은 숫자만 본다.
+MAX_PREVIEW_BYTES = 4 * 1024 * 1024
+PREVIEW_TOO_LARGE_DETAIL = "파일이 4MB 를 넘습니다. 공시 xlsx 원본은 보통 1–3MB 입니다."
 
 #: 한 번에 올릴 수 있는 파일 수. 전 연도를 한꺼번에 올려도 넉넉하다.
 MAX_FILES = 20
@@ -51,6 +60,27 @@ KEEP_BACKUPS = 3
 
 #: 백업 폴더 이름의 앞머리. `output/` 안에 만들되 파일만 골라 담는다.
 BACKUP_PREFIX = ".backup-"
+
+#: 읽기 전용 배포를 **강제로** 재현하는 환경변수. `1|true|yes` 면 켜진 것이다.
+#:
+#: 기능 플래그가 아니라 검증용 스위치다. 공개 사이트(Vercel)는 디스크가 읽기
+#: 전용이라 저절로 그 모드가 되지만, 개발 PC 는 언제나 쓸 수 있어 e2e 가 그
+#: 모드를 만들 방법이 없었다. 켜지면 `/api/preprocess` 가 409, 설정의
+#: `canPersist` 가 False, 그리고 **서버 환경변수의 OpenAI 키도 없는 것으로
+#: 친다**(`.env` 에 진짜 키가 있는 PC 에서도 브라우저 키 폼이 떠야 한다).
+FORCE_READONLY_ENV = "HOSEO_FORCE_READONLY"
+
+
+#: 쓸 수 없는 서버에서 갱신을 거절할 때의 사유. 화면에 그대로 뜬다.
+READONLY_DETAIL = (
+    "이 서버는 읽기 전용 배포라 데이터를 갱신할 수 없습니다. "
+    "로컬에서 전처리한 결과를 커밋해 다시 배포하세요."
+)
+
+
+def forced_readonly() -> bool:
+    """`HOSEO_FORCE_READONLY` 가 켜져 있는가. 매번 환경변수를 읽는다(테스트가 바꾼다)."""
+    return os.environ.get(FORCE_READONLY_ENV, "").strip().lower() in {"1", "true", "yes"}
 
 
 def raw_dir() -> Path:
@@ -70,7 +100,7 @@ def safe_name(filename: str | None) -> str:
     있다. 여기서 막지 않으면 막을 곳이 없다.
     """
     if not filename:
-        raise HTTPException(status_code=400, detail="파일명이 없다.")
+        raise HTTPException(status_code=400, detail="파일명이 없습니다.")
 
     # macOS 는 파일명을 NFD 로 보낸다. 정규화하지 않으면 '년' 이 자모로
     # 분해돼 연도 검사가 실패한다(scan_raw_files 와 같은 이유).
@@ -79,12 +109,12 @@ def safe_name(filename: str | None) -> str:
     # 경로 성분을 통째로 버린다. 이름만 쓴다.
     name = Path(name.replace("\\", "/")).name
     if not name or name in {".", ".."}:
-        raise HTTPException(status_code=400, detail=f"쓸 수 없는 파일명이다: {filename}")
+        raise HTTPException(status_code=400, detail=f"쓸 수 없는 파일명입니다: {filename}")
 
     if not name.lower().endswith(".xlsx"):
         raise HTTPException(
             status_code=400,
-            detail=f"xlsx 파일만 받는다: {name}",
+            detail=f"xlsx 파일만 올릴 수 있습니다: {name}",
         )
 
     # 확장자를 소문자로 못박는다. `scan_raw_files` 가 `glob("*.xlsx")` 로 찾기
@@ -98,12 +128,29 @@ def safe_name(filename: str | None) -> str:
         raise HTTPException(
             status_code=400,
             detail=(
-                f"파일명에서 연도를 읽을 수 없다: {name}. "
-                f"'2026년_...' 또는 '2026_...' 형태여야 한다."
+                f"파일명에서 연도를 읽을 수 없습니다: {name}. "
+                f"'2026년_...' 또는 '2026_...' 형태여야 합니다."
             ),
         )
 
     return name
+
+
+def _require_writable(*folders: Path) -> None:
+    """쓸 수 없는 서버에서는 시작하지 않는다.
+
+    Vercel 같은 서버리스는 `/tmp` 밖이 읽기 전용이다. 막지 않으면 `OSError` 가
+    설명 없는 500 으로 나간다. `/tmp` 로 돌리는 것도 답이 아니다 — 인스턴스마다
+    따로이고 곧 사라져, 갱신이 됐다가 안 됐다가 하는 것처럼 보인다.
+
+    `HOSEO_FORCE_READONLY` 가 켜져 있으면 디스크 권한과 무관하게 같은 409 다.
+    """
+    if forced_readonly():
+        raise HTTPException(status_code=409, detail=READONLY_DETAIL)
+    for folder in folders:
+        probe = folder if folder.exists() else folder.parent
+        if not os.access(probe, os.W_OK):
+            raise HTTPException(status_code=409, detail=READONLY_DETAIL)
 
 
 def ingest(uploads: list[tuple[str, bytes]]) -> dict:
@@ -113,15 +160,16 @@ def ingest(uploads: list[tuple[str, bytes]]) -> dict:
         처리 요약 + 무엇을 저장하고 무엇을 백업했는지.
     """
     if not uploads:
-        raise HTTPException(status_code=400, detail="올린 파일이 없다.")
+        raise HTTPException(status_code=400, detail="올린 파일이 없습니다.")
     if len(uploads) > MAX_FILES:
         raise HTTPException(
             status_code=400,
-            detail=f"한 번에 {MAX_FILES}개까지 올릴 수 있다. 받은 파일: {len(uploads)}개",
+            detail=f"한 번에 {MAX_FILES}개까지 올릴 수 있습니다. 받은 파일: {len(uploads)}개",
         )
 
     raw = raw_dir()
     out = output_dir()
+    _require_writable(raw, out)
     raw.mkdir(parents=True, exist_ok=True)
 
     # (경로, 원래 내용) — 실패하면 이걸로 되돌린다. None 은 "원래 없던 파일".
@@ -133,12 +181,12 @@ def ingest(uploads: list[tuple[str, bytes]]) -> dict:
                 raise HTTPException(
                     status_code=400,
                     detail=(
-                        f"{name} 이(가) 너무 크다 "
+                        f"{name} 이(가) 너무 큽니다"
                         f"({len(data) // (1024 * 1024)}MB, 상한 {MAX_FILE_BYTES // (1024 * 1024)}MB)."
                     ),
                 )
             if not data:
-                raise HTTPException(status_code=400, detail=f"{name} 이(가) 비어 있다.")
+                raise HTTPException(status_code=400, detail=f"{name} 이(가) 비어 있습니다.")
 
             dest = raw / name
             previous = dest.read_bytes() if dest.exists() else None
@@ -153,18 +201,7 @@ def ingest(uploads: list[tuple[str, bytes]]) -> dict:
                 # 사용자가 읽고 고칠 수 있는 상황이다(폴더 없음, 연도 없음).
                 raise HTTPException(status_code=400, detail=str(e)) from e
             except Exception as e:
-                # 파일 내용이 기대와 다르면 코어가 제각각의 예외를 던진다
-                # (`BadZipFile`, `KeyError`, `ValueError`…). 그대로 새어 나가면
-                # 사용자는 아무 설명 없는 500 을 본다. **원인이 대개 올린
-                # 파일이므로** 400 으로, 무엇을 확인해야 하는지와 함께 올린다.
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        "전처리가 실패했다. 올린 파일이 대학알리미 "
-                        "「전임교원의 연구 실적」 공시 xlsx 가 맞는지 확인할 것. "
-                        f"({type(e).__name__}: {e})"
-                    ),
-                ) from e
+                raise _preprocess_failed(e) from e
 
             backup = _replace_outputs(staging, out)
 
@@ -180,6 +217,102 @@ def ingest(uploads: list[tuple[str, bytes]]) -> dict:
         "savedFiles": [p.name for p, _ in written],
         "backupPath": backup.name if backup else None,
     }
+
+
+def _preprocess_failed(e: Exception) -> HTTPException:
+    """코어가 던진 제각각의 예외를 사용자가 읽을 400 으로 바꾼다.
+
+    파일 내용이 기대와 다르면 코어는 `BadZipFile`, `KeyError`, `ValueError`…
+    를 던진다. 그대로 새어 나가면 사용자는 아무 설명 없는 500 을 본다.
+    **원인이 대개 올린 파일이므로** 400 으로, 무엇을 확인해야 하는지와 함께.
+    `/api/preprocess` 와 `/api/dataset/preview` 가 같은 문장을 쓴다.
+    """
+    return HTTPException(
+        status_code=400,
+        detail=(
+            "전처리가 실패했습니다. 올린 파일이 대학알리미 "
+            "「전임교원의 연구 실적」 공시 xlsx 가 맞는지 확인하세요. "
+            f"({type(e).__name__}: {e})"
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# 미리보기 — 디스크에 아무것도 쓰지 않는다
+# ---------------------------------------------------------------------------
+
+
+def preview(name: str, data: bytes) -> dict:
+    """공시 xlsx 한 해를 메모리에서 계산해 **영문 키 행**으로 돌려준다.
+
+    읽기 전용 배포를 위한 경로다. `ingest` 와 달리 `Raw data/`·`output/` 을
+    건드리지 않고, 캐시도 비우지 않는다 — 결과는 브라우저가 들고 간다.
+
+    한 해 안의 순위는 그 해 파일만으로 완결되므로 파일 하나로 충분하다
+    (`process_in_memory` 가 폴더 전체를 요구하지 않는 이유와 같다).
+    """
+    if len(data) > MAX_PREVIEW_BYTES:
+        raise HTTPException(status_code=413, detail=PREVIEW_TOO_LARGE_DETAIL)
+    if not data:
+        raise HTTPException(status_code=400, detail=f"{name} 이(가) 비어 있습니다.")
+
+    # `safe_name` 이 연도를 보장한다. 결과의 연도가 이것 하나여야 한다.
+    match = pp.YEAR_PATTERN.search(name)
+    assert match is not None  # noqa: S101 — safe_name 계약
+    year = int(match.group(1))
+
+    try:
+        national, regional = pp.process_in_memory({name: data})
+    except pp.PreprocessError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:  # noqa: BLE001
+        raise _preprocess_failed(e) from e
+
+    found_years = sorted(
+        {int(y) for y in national["연도"].unique()} | {int(y) for y in regional["연도"].unique()}
+    )
+    if found_years != [year]:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"{name} 의 계산 결과에 파일명의 {year}년이 아닌 연도가 있습니다: "
+                f"{found_years}. 파일 하나에는 한 해만 들어 있어야 합니다."
+            ),
+        )
+
+    return {
+        "year": year,
+        "universities": int(len(national)),
+        "sourceFile": name,
+        "national": _records(national, schemas.OVERLAY_NATIONAL_COLUMNS),
+        "regional": _records(regional, schemas.OVERLAY_REGIONAL_COLUMNS),
+    }
+
+
+def _records(frame: pd.DataFrame, columns: dict[str, str]) -> list[dict]:
+    """코어 프레임 → 영문 키 행. 한글 → 영문은 `schemas` 의 표 하나로만 한다.
+
+    numpy 스칼라를 파이썬 값으로 풀고, 빈 순위(NaN)는 None 으로 보낸다 —
+    pydantic 의 `int | None` 은 NaN 을 받지 않아 응답 직렬화에서 500 이 난다.
+    """
+    inverse = {korean: english for english, korean in columns.items()}
+    rank_columns = {"전국순위", "권역순위"}
+    float_columns = {"SCI/SCOPUS논문수", "1인당논문수"}
+
+    rows: list[dict] = []
+    for record in frame[list(columns.values())].to_dict("records"):
+        row: dict = {}
+        for korean, value in record.items():
+            if korean in rank_columns:
+                row[inverse[korean]] = None if pd.isna(value) else int(value)
+            elif korean in float_columns:
+                row[inverse[korean]] = float(value)
+            elif korean in {"연도", "전임교원수"}:
+                row[inverse[korean]] = int(value)
+            else:
+                row[inverse[korean]] = str(value)
+        rows.append(row)
+    return rows
 
 
 def _replace_outputs(staging: Path, out: Path) -> Path | None:
@@ -263,4 +396,16 @@ def _rollback(written: list[tuple[Path, bytes | None]]) -> None:
             continue
 
 
-__all__ = ["MAX_FILES", "MAX_FILE_BYTES", "ingest", "output_dir", "raw_dir", "safe_name"]
+__all__ = [
+    "FORCE_READONLY_ENV",
+    "MAX_FILES",
+    "MAX_FILE_BYTES",
+    "MAX_PREVIEW_BYTES",
+    "READONLY_DETAIL",
+    "forced_readonly",
+    "ingest",
+    "output_dir",
+    "preview",
+    "raw_dir",
+    "safe_name",
+]

@@ -6,9 +6,11 @@
 
 두 가지 원칙이 이 모듈의 모양을 정한다.
 
-1. **API 키는 서버 밖으로 나가지 않는다.** 프론트는 "설정됨/미설정" 만 안다.
+1. **서버는 키를 저장하지도 돌려주지도 않는다.** 서버 키는 밖으로 나가지
+   않고(프론트는 "설정됨/미설정" 만 안다), 브라우저 키(BYOK, `X-OpenAI-Key`
+   헤더)는 요청 안에서만 살다 사라진다 — 응답·로그 어디에도 남기지 않는다.
    Streamlit 판은 키를 `session_state` 에 담아 화면과 같은 생명주기에 뒀는데,
-   그건 키를 브라우저로 보낸다는 뜻이다.
+   그건 서버가 키를 브라우저로 보낸다는 뜻이었다.
 
 2. **보고서는 디스크에 남기지 않는다.** 메모리에서 만들어 바이트로 내려준다.
    서버가 파일을 쓰면 동시 사용자끼리 덮어쓰고, 클라우드에서는 쓰기 권한조차
@@ -21,19 +23,21 @@
 from __future__ import annotations
 
 import os
+import re
 import threading
 from collections import OrderedDict
 from io import BytesIO
 from urllib.parse import quote
 
 import pandas as pd
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 
 import core.chart_generator as cg
 import core.gpt_reporter as gpt
 import core.report_builder as rb
 from api import analysis, deps, schemas
+from api import preprocess_service as svc
 
 router = APIRouter(prefix="/api", tags=["report"])
 
@@ -50,23 +54,103 @@ DOCX_MEDIA_TYPE = (
 )
 
 
-def _require_api_key() -> str:
-    """서버가 가진 키를 돌려준다. 없으면 **이유를 말하고** 503.
+#: 브라우저가 자기 키를 실어 보내는 요청 헤더(BYOK).
+#:
+#: `Header()` 매개변수로 선언하지 않고 `request.headers` 에서 직접 읽는다 —
+#: 선언하면 OpenAPI 와 생성 타입에 키 매개변수가 박힌다. 키는 요청이 끝나면
+#: 사라진다. 서버는 저장하지도, 로그에 남기지도 않는다.
+CLIENT_KEY_HEADER = "X-OpenAI-Key"
 
-    V16 은 키가 없을 때 사이드바에 "⚠ 미설정" 만 뜨고 왜 그런지는
-    알려주지 않던 결함이었다. 문서가 안내한 중첩 `[openai]` 테이블 형식이
-    코드가 읽는 평면 키와 달라서 생긴 일인데, 사용자는 원인을 알 길이 없었다.
+#: 헤더 키의 모양. `sk-` + 출력 가능한 ASCII 17–197자(전체 20–200자).
+#: 공백·한글·제어 문자가 섞인 키는 OpenAI 로 보내기 전에 여기서 막는다.
+_CLIENT_KEY_RE = re.compile(r"^sk-[\x21-\x7e]{17,197}$")
+
+#: 실패 사유에서 키 자리에 넣는 표식. `sk-` 를 포함하면 안 된다 —
+#: "응답 본문에 `sk-` 가 없다" 가 키 유출 테스트의 계약이다.
+_KEY_MASK = "***"
+
+#: 키처럼 생긴 토큰 전부. OpenAI SDK 의 인증 오류는 키 앞 8자를 되돌려 주고
+#: (`sk-proj****…0000`), 200자 자르기는 임의 위치에서 키를 끊는다. 정확한 키와
+#: 그 접두사만 지우면 이 둘이 샌다.
+_KEY_LIKE_RE = re.compile(r"sk-[\x21-\x7e]{8,}")
+
+MISSING_KEY_DETAIL = (
+    "OpenAI API 키가 없습니다. 설정에서 키를 넣거나 "
+    "서버 환경변수 OPENAI_API_KEY 를 설정하세요."
+)
+BAD_CLIENT_KEY_DETAIL = (
+    "브라우저에 저장된 OpenAI 키 형식이 올바르지 않습니다. 설정에서 다시 넣으세요."
+)
+
+
+def _client_key(request: Request) -> str | None:
+    """요청 헤더의 브라우저 키. 없으면(빈 값 포함) None, 모양이 틀리면 422.
+
+    빈 헤더를 422 로 막지 않는 이유: 브라우저가 키를 지운 뒤 남은 빈 헤더
+    하나로 서버 키까지 못 쓰게 되면 안 된다.
     """
-    key = os.environ.get("OPENAI_API_KEY", "").strip()
-    if not key or key.startswith("sk-여기에"):
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "OPENAI_API_KEY 가 설정되지 않았다. 환경변수나 .env 에 "
-                "**평면 키**로 넣어야 한다 — [openai] 테이블 형식은 인식되지 않는다."
-            ),
-        )
+    raw = request.headers.get(CLIENT_KEY_HEADER)
+    if raw is None:
+        return None
+    key = raw.strip()
+    if not key:
+        return None
+    if not _CLIENT_KEY_RE.match(key):
+        raise HTTPException(status_code=422, detail=BAD_CLIENT_KEY_DETAIL)
     return key
+
+
+def _require_api_key(request: Request) -> str:
+    """쓸 키를 정한다. **헤더 → 서버 환경변수 → 503.**
+
+    헤더가 먼저다. 사용자가 방금 설정에 넣은 키가 쓰여야 하고, 운영자가 서버에
+    키를 넣어 둔 공개 사이트에서도 방문자는 자기 키를 쓸 수 있어야 한다.
+
+    `HOSEO_FORCE_READONLY` 가 켜져 있으면 서버 키를 보지 않는다 — 개발 PC 의
+    `.env` 에 진짜 키가 있어도 공개 사이트 모드를 그대로 재현하기 위해서다
+    (`/api/settings` 가 `apiKeyConfigured=false` 를 돌려주는 것과 짝).
+
+    V16 은 키가 없을 때 "⚠ 미설정" 만 뜨고 왜 그런지는 알려주지 않던
+    결함이었다. 503 은 무엇을 하면 되는지까지 말한다.
+    """
+    from_header = _client_key(request)
+    if from_header:
+        return from_header
+
+    if not svc.forced_readonly():
+        key = os.environ.get("OPENAI_API_KEY", "").strip()
+        if key and not key.startswith("sk-여기에"):
+            return key
+
+    raise HTTPException(status_code=503, detail=MISSING_KEY_DETAIL)
+
+
+def _make_client(key: str):  # noqa: ANN202 — openai 타입을 모듈 상단에서 import 하지 않는다
+    """OpenAI 클라이언트. 서버리스 함수 한 번을 GPT 호출 1회로 묶는 설정이다.
+
+    SDK 기본값(600초·재시도 2회)이면 한 절이 함수 시간 상한을 넘겨 사용자는
+    504 만 본다. 60초에 재시도 1회면 실패도 1분 안에 돌아온다.
+
+    `from openai import OpenAI` 를 함수 안에서 하는 이유: 테스트가
+    `openai.OpenAI` 를 바꿔치기해 생성 인자를 확인한다. 모듈 상단에서 묶으면
+    바꿔치기가 보이지 않는다.
+    """
+    from openai import OpenAI
+
+    return OpenAI(api_key=key, timeout=60, max_retries=1)
+
+
+def _scrub(message: str, key: str) -> str:
+    """실패 사유에서 키를 지운다. 응답·로그 어디에도 키가 남으면 안 된다.
+
+    세 겹이다: 키 전체 → 앞 12자 이상의 접두사(200자 자르기·SDK 마스킹이 남긴
+    조각) → 키처럼 생긴 토큰 전부(`sk-` + 8자 이상). 한글 사유는 ASCII 가
+    아니라 건드리지 않는다.
+    """
+    out = message.replace(key, _KEY_MASK)
+    for n in range(len(key) - 1, 11, -1):
+        out = out.replace(key[:n], _KEY_MASK)
+    return _KEY_LIKE_RE.sub(_KEY_MASK, out)
 
 
 # ---------------------------------------------------------------------------
@@ -75,26 +159,28 @@ def _require_api_key() -> str:
 
 
 @router.post("/narrative", response_model=schemas.NarrativeResponse)
-def post_narrative(req: schemas.NarrativeRequest) -> schemas.NarrativeResponse:
-    keys = tuple(req.keys) if req.keys else schemas.NARRATIVE_KEYS
+def post_narrative(
+    req: schemas.NarrativeRequest, request: Request
+) -> schemas.NarrativeResponse:
+    # 순서를 지키되 중복은 한 번만 만든다. 같은 절을 두 번 보내면 GPT 를 두 번
+    # 부르고 응답은 한 키에 마지막 것만 남는다 — 비용만 들고 결과는 같다.
+    keys = tuple(dict.fromkeys(req.keys)) if req.keys else schemas.NARRATIVE_KEYS
     unknown = [k for k in keys if k not in schemas.NARRATIVE_KEYS]
     if unknown:
         raise HTTPException(
             status_code=422,
-            detail=f"알 수 없는 서술 키: {unknown}. 가능: {list(schemas.NARRATIVE_KEYS)}",
+            detail=f"알 수 없는 서술 키입니다: {unknown}. 가능한 키: {list(schemas.NARRATIVE_KEYS)}",
         )
 
-    api_key = _require_api_key()
+    api_key = _require_api_key(request)
 
     scope = analysis.resolve_scope(
-        req.university, req.year, req.regionName, req.compareGroup, req.years
+        req.university, req.year, req.regionName, req.compareGroup, req.years, req.overlay
     )
     region_name = scope.region_name
     stats = analysis.collect_stats(scope)
 
-    from openai import OpenAI
-
-    client = OpenAI(api_key=api_key)
+    client = _make_client(api_key)
 
     generators = {
         "trend": lambda: gpt.generate_trend_narrative(
@@ -122,8 +208,10 @@ def post_narrative(req: schemas.NarrativeRequest) -> schemas.NarrativeResponse:
             narratives[key] = generators[key]()
         except Exception as e:  # noqa: BLE001
             # 하나 실패했다고 전부 버리면 사용자가 4번을 다시 기다린다.
-            # 실패는 조용히 빈 문자열로 두지 않고 이유와 함께 올려보낸다.
-            failed[key] = f"{type(e).__name__}: {e}"
+            # 실패는 조용히 빈 문자열로 두지 않고 이유와 함께 올려보낸다 —
+            # 단, 요약만(200자) 그리고 키는 지우고. SDK 의 인증 오류는 키
+            # 조각을 메시지에 되돌려 준다.
+            failed[key] = _scrub(f"{type(e).__name__}: {e}"[:200], api_key)
 
     return schemas.NarrativeResponse(narratives=narratives, failed=failed)
 
@@ -136,7 +224,7 @@ def post_narrative(req: schemas.NarrativeRequest) -> schemas.NarrativeResponse:
 @router.post("/report")
 def post_report(req: schemas.ReportRequest) -> Response:
     scope = analysis.resolve_scope(
-        req.university, req.year, req.regionName, req.compareGroup, req.years
+        req.university, req.year, req.regionName, req.compareGroup, req.years, req.overlay
     )
     region_name = scope.region_name
     stats = analysis.collect_stats(scope)
@@ -257,16 +345,28 @@ def _charts_for(
     region: str | None,
     compare_group: list[str] | None,
     years: list[int] | None,
+    overlay: schemas.DatasetOverlay | None = None,
 ) -> dict[str, BytesIO]:
     """5종 차트를 그려 돌려준다. 같은 입력이면 다시 그리지 않는다."""
-    scope = analysis.resolve_scope(university, year, region, compare_group, years)
+    scope = analysis.resolve_scope(university, year, region, compare_group, years, overlay)
 
     # 키는 **확정된** 값으로 만든다. 요청이 region 을 생략해도 서버가 판정한
     # 권역이 같으면 같은 그림이므로 캐시가 맞는다.
     #
     # 분석 연도도 키에 들어간다. 빠뜨리면 연도만 바꿨을 때 이전 그림이 그대로
     # 나와, 화면은 3개년인데 차트는 11개년인 상태가 된다.
-    key = (university, year, scope.region_name, tuple(scope.compare_group), tuple(scope.years))
+    #
+    # 브라우저 데이터셋의 digest 도 키에 들어간다. 빠뜨리면 overlay 를 더하거나
+    # 지운 뒤에도 옛 그림이 나온다 — 전처리 캐시 사고가 그대로 재현된다.
+    # overlay 요청도 같은 캐시(크기 4)를 쓴다.
+    key = (
+        university,
+        year,
+        scope.region_name,
+        tuple(scope.compare_group),
+        tuple(scope.years),
+        scope.overlay_hash,
+    )
 
     with _CHART_LOCK:
         cached = _CHART_CACHE.get(key)
@@ -323,11 +423,7 @@ def get_chart(
     추이 차트만은 화면에서 인터랙티브(recharts)로도 보여준다 — 값을 짚어
     읽는 용도다. 나머지 4종은 이 PNG 가 유일한 표현이다.
     """
-    if kind not in schemas.CHART_KEYS:
-        raise HTTPException(
-            status_code=404,
-            detail=f"없는 차트 종류: {kind}. 가능: {list(schemas.CHART_KEYS)}",
-        )
+    _require_chart_kind(kind)
 
     payload = _charts_for(university, year, region, compareGroup, years)[kind].getvalue()
     return Response(
@@ -339,3 +435,32 @@ def get_chart(
             "Cache-Control": "private, max-age=300",
         },
     )
+
+
+@router.post("/chart/{kind}.png")
+def post_chart(kind: str, req: schemas.ChartRequest) -> Response:
+    """GET 과 같은 PNG 를, 브라우저 데이터셋(`overlay`)을 덧씌워 그린다.
+
+    overlay 는 수백 KB 라 주소에 실을 수 없어 본문으로 받는다. 그래서 브라우저
+    캐시도 쓸 수 없다 — `no-store` 로 못박고, 화면 쪽이 objectURL 을 자기
+    캐시 키(매개변수 + `overlayHash`)로 들고 있다가 overlay 가 바뀌면 버린다.
+    overlay 가 없는 화면은 GET 을 쓴다.
+    """
+    _require_chart_kind(kind)
+
+    payload = _charts_for(
+        req.university, req.year, req.regionName, req.compareGroup, req.years, req.overlay
+    )[kind].getvalue()
+    return Response(
+        content=payload,
+        media_type="image/png",
+        headers={"Cache-Control": "private, no-store"},
+    )
+
+
+def _require_chart_kind(kind: str) -> None:
+    if kind not in schemas.CHART_KEYS:
+        raise HTTPException(
+            status_code=404,
+            detail=f"없는 차트 종류입니다: {kind}. 가능한 종류: {list(schemas.CHART_KEYS)}",
+        )
