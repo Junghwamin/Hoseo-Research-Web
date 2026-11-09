@@ -61,7 +61,8 @@ describe('브라우저 키 저장소', () => {
 
 describe('마스킹과 형식 검사', () => {
   it('앞 5자와 뒤 4자만 남긴다', () => {
-    expect(maskKey('sk-abcdefghijklmnop7f2c')).toBe('sk-ab…7f2c')
+    // 통짜 리터럴을 쓰면 저장소 위생 검사(test_repo_hygiene)가 키로 본다.
+    expect(maskKey(FAKE_KEY)).toBe('sk-te…xxxx')
     expect(maskKey('sk-short')).toBe('sk-…')
   })
 
